@@ -1,6 +1,8 @@
 package actor
 
 import (
+	//"aquarium/ai"
+	"bytes"
 	"fmt"
 
 	"context"
@@ -9,12 +11,15 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 
 	"time"
 )
 
 type Actor struct {
 	containerId    string
+	ctx            context.Context
+	cli            *client.Client
 	Id             string
 	IterationCount int
 	commandState   string
@@ -52,6 +57,8 @@ func (a *Actor) Loop() <-chan struct{} {
 	}
 
 	a.containerId = resp.ID
+	a.ctx = ctx
+	a.cli = cli
 	if err := cli.NetworkConnect(ctx, "aquarium", resp.ID, nil); err != nil {
 		panic(err)
 	}
@@ -79,60 +86,69 @@ func (a *Actor) Loop() <-chan struct{} {
 }
 
 func (a *Actor) iteration() {
+	handleError := func(err error) {
+		fmt.Printf("Actor %s fatal error: %s\n", a.Id, err)
+		close(a.quit)
+	}
+
 	a.IterationCount++
 	fmt.Printf("%s iteration %d\n", a.Id, a.IterationCount)
 
-	/*
-		var nextCommand string
-		var err error
+	var nextCommand string
+	var err error
 
+	/*
 		if a.IterationCount == 1 {
 			nextCommand, err = ai.GenInitialDialogue()
 		} else {
 			nextCommand, err = ai.GenNextDialogue(a.commandState)
 		}
-
-		if err != nil {
-			fmt.Printf("Actor %s fatal error: %s\n", a.Id, err)
-			close(a.quit)
-			return
-		}
-
-		fmt.Printf("%s iteration %d: %s\n", a.Id, a.IterationCount, nextCommand)
 	*/
+	// shortcut
+	nextCommand = "sudo nmap -sS -Pn -p- amazon.com"
 
-	// TODO: Execute command
-	// store output into a.commandState
-	/*
-	   ctx := context.Background()
-	   cli, err := client.NewClientWithOpts(client.FromEnv)
-	   if err != nil {
-	       return "", err
-	   }
+	if err != nil {
+		handleError(err)
+		return
+	}
 
-	   execResp, err := cli.ContainerExecCreate(ctx, a.containerID, types.ExecConfig{
-	       Cmd: []string{"/bin/bash", "-c", command},
-	   })
-	   if err != nil {
-	       return "", err
-	   }
+	fmt.Printf("%s iteration %d: executing %s\n", a.Id, a.IterationCount, nextCommand)
 
-	   var buf bytes.Buffer
-	   execOpts := types.ExecStartCheck{}
-	   if err := cli.ContainerExecStart(ctx, execResp.ID, execOpts); err != nil {
-	       return "", err
-	   }
+	// Execute command in container
+	if err != nil {
+		handleError(err)
+		return
+	}
 
-	   reader, err := cli.ContainerExecAttach(ctx, execResp.ID, types.ExecConfig{})
-	   if err != nil {
-	       return "", err
-	   }
-	   defer reader.Close()
+	execResp, err := a.cli.ContainerExecCreate(a.ctx, a.containerId, types.ExecConfig{
+		Cmd:          []string{"/bin/bash", "-c", nextCommand},
+		AttachStderr: true,
+		AttachStdout: true,
+	})
+	if err != nil {
+		handleError(err)
+		return
+	}
 
-	   if _, err := io.Copy(&buf, reader.Reader); err != nil {
-	       return "", err
-	   }
+	reader, err := a.cli.ContainerExecAttach(a.ctx, execResp.ID, types.ExecStartCheck{})
+	if err != nil {
+		handleError(err)
+		return
+	}
+	defer reader.Close()
 
-	   return buf.String(), nil
-	*/
+	var stdoutBuf, stderrBuf bytes.Buffer
+	if _, err := stdcopy.StdCopy(&stdoutBuf, &stderrBuf, reader.Reader); err != nil {
+		handleError(err)
+		return
+	}
+
+	execRespCode, err := a.cli.ContainerExecInspect(a.ctx, execResp.ID)
+
+	fmt.Printf("execRespCode: %d\n", execRespCode.ExitCode)
+
+	//a.commandState = buf.String()
+	fmt.Println("result:")
+	fmt.Println(stdoutBuf.String())
+	fmt.Println(stderrBuf.String())
 }
