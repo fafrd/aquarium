@@ -1,20 +1,39 @@
 package main
 
 import (
-	"aquarium/ai"
-	"fmt"
+	"aquarium/actor"
+	"sync"
+	"time"
 	/*
 		"bufio"
 		"os/exec"
 	*/)
 
 func main() {
-	resp, err := ai.GenDialogue()
-	if err != nil {
-		fmt.Println(err)
-		return
+
+	actors := []*actor.Actor{
+		actor.NewActor(),
+		//actor.NewActor(),
 	}
-	fmt.Println(resp)
+
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(len(actors))
+
+	for _, a := range actors {
+		go func(actor *actor.Actor) {
+			defer wg.Done()
+			<-actor.Loop()
+		}(a)
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	go func() {
+		defer close(done)
+		wg.Wait()
+	}()
+
+	<-done
 
 	/*
 		cmd := exec.Command("ls", "-l") // Replace with your command

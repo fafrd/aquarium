@@ -10,14 +10,30 @@ import (
 	"github.com/PullRequestInc/go-gpt3"
 )
 
-var prompt = `Solve the following math problem: %s`
-var subject = `What is 2 + 2?`
+var basis = `You now have control of an Ubuntu Linux server. Your goal is to execute a port scan of amazon.com. Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.`
+var initialPrompt = fmt.Sprintf(`%s
+
+Respond with a linux command to give to the server.`, basis)
+var nextPrompt = fmt.Sprintf(`%s
+
+Previous commands and output:
+%%s
+
+Respond with a linux command to give to the server.`, basis)
 var tokens = 100
 
-func GenDialogue() (string, error) {
+func GenInitialDialogue() (string, error) {
+	return genDialogue(initialPrompt, "")
+}
+
+func GenNextDialogue(state string) (string, error) {
+	return genDialogue(nextPrompt, state)
+}
+
+func genDialogue(prompt string, subject string) (string, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		return "", errors.New("Missing env var OPENAI_API_KEY")
+		return "", errors.New("undefined env var OPENAI_API_KEY")
 	}
 
 	aiPrompt := fmt.Sprintf(prompt, subject)
@@ -26,9 +42,10 @@ func GenDialogue() (string, error) {
 	client := gpt3.NewClient(apiKey)
 
 	resp, err := client.CompletionWithEngine(ctx, "text-davinci-001", gpt3.CompletionRequest{
-		Prompt:    []string{aiPrompt},
-		MaxTokens: gpt3.IntPtr(tokens),
-		Echo:      false,
+		Prompt:      []string{aiPrompt},
+		MaxTokens:   gpt3.IntPtr(tokens),
+		Temperature: gpt3.Float32Ptr(0.0),
+		Echo:        false,
 	})
 	if err != nil {
 		return "", err
