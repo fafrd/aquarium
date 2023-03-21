@@ -1,8 +1,9 @@
 # bot aquarium
 
-xkcd/350, but with ai:
+imagine xkcd/350, but with ai:
 
-![https://xkcd.com/350/](https://imgs.xkcd.com/comics/network.png)
+[![https://xkcd.com/350/](https://imgs.xkcd.com/comics/network.png)](https://xkcd.com/350/)
+k
 
 
 ## Build docker image
