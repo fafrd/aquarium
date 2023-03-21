@@ -18,13 +18,14 @@ import (
 )
 
 type Actor struct {
-	containerId    string
-	ctx            context.Context
-	cli            *client.Client
-	Id             string
-	IterationCount int
-	commandState   string
-	quit           chan struct{}
+	cli                *client.Client
+	ctx                context.Context
+	containerId        string
+	terminalConnection types.HijackedResponse
+	Id                 string
+	IterationCount     int
+	commandState       string
+	quit               chan struct{}
 }
 
 func NewActor() *Actor {
@@ -58,8 +59,6 @@ func (a *Actor) Loop() <-chan struct{} {
 	}
 
 	a.containerId = resp.ID
-	a.ctx = ctx
-	a.cli = cli
 	if err := cli.NetworkConnect(ctx, "aquarium", resp.ID, nil); err != nil {
 		panic(err)
 	}
@@ -70,6 +69,34 @@ func (a *Actor) Loop() <-chan struct{} {
 
 	fmt.Printf("%s Container started with id %s\n", a.Id, a.containerId)
 
+	// create actor connection to terminal
+	terminalExecConfig, err := cli.ContainerExecCreate(ctx, a.containerId, types.ExecConfig{
+		Tty:          true,
+		Cmd:          []string{"/bin/bash"},
+		AttachStdin:  true,
+		AttachStderr: true,
+		AttachStdout: true,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	terminalExecConnection, err := cli.ContainerExecAttach(ctx, terminalExecConfig.ID, types.ExecStartCheck{Tty: true})
+	if err != nil {
+		panic(err)
+	}
+
+	// initialize terminal
+	terminalExecConnection.Conn.Write([]byte("su ubuntu\n"))
+	terminalExecConnection.Conn.Write([]byte("cd\n"))
+	terminalExecConnection.Conn.Write([]byte(fmt.Sprintf("script -f /tmp/out-%s\n", a.Id))) // write all terminal output to file /tmp/out-id
+	terminalExecConnection.Conn.Write([]byte("/bin/bash\n"))
+	a.terminalConnection = terminalExecConnection
+	a.cli = cli
+	a.ctx = ctx
+
+	fmt.Printf("%s Container terminal attached: %s\n", a.Id, a.containerId)
+
 	go func() {
 		defer close(done)
 		for {
@@ -78,7 +105,7 @@ func (a *Actor) Loop() <-chan struct{} {
 				return
 			default:
 				a.iteration()
-				time.Sleep(12 * time.Second)
+				time.Sleep(5 * time.Second)
 			}
 		}
 	}()
@@ -103,22 +130,24 @@ func (a *Actor) iteration() {
 	} else {
 		nextCommand, err = ai.GenNextDialogue(a.commandState)
 	}
-
+	// shortcut
+	//nextCommand = "mkdir test && cd test && pwd"
 	if err != nil {
 		handleError(err)
 		return
 	}
-
-	fmt.Printf("%s iteration %d: executing %s\n", a.Id, a.IterationCount, nextCommand)
 
 	// Execute command in container
-	if err != nil {
-		handleError(err)
-		return
-	}
+	fmt.Printf("%s iteration %d: executing %s\n", a.Id, a.IterationCount, nextCommand)
+	a.terminalConnection.Conn.Write([]byte(nextCommand + "\n"))
 
-	execResp, err := a.cli.ContainerExecCreate(a.ctx, a.containerId, types.ExecConfig{
-		Cmd:          []string{"/bin/bash", "-c", nextCommand},
+	// wait for command to finish
+	time.Sleep(5 * time.Second) // TODO not correct
+
+	// read output
+	// create operator connection to terminal (secondary connection for administration)
+	operatorExecConfig, err := a.cli.ContainerExecCreate(a.ctx, a.containerId, types.ExecConfig{
+		Cmd:          []string{"cat", fmt.Sprintf("/tmp/out-%s", a.Id)},
 		AttachStderr: true,
 		AttachStdout: true,
 	})
@@ -127,26 +156,23 @@ func (a *Actor) iteration() {
 		return
 	}
 
-	reader, err := a.cli.ContainerExecAttach(a.ctx, execResp.ID, types.ExecStartCheck{})
+	operatorExecConnection, err := a.cli.ContainerExecAttach(a.ctx, operatorExecConfig.ID, types.ExecStartCheck{})
 	if err != nil {
 		handleError(err)
 		return
 	}
-	defer reader.Close()
 
 	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, reader.Reader); err != nil {
+	if _, err := io.Copy(&buf, operatorExecConnection.Reader); err != nil {
 		handleError(err)
 		return
 	}
 
-	// TODO fix the title here
-	a.commandState += fmt.Sprintf(`
-root@fec6b966da62:/# %s
-%s`, nextCommand, strings.TrimSpace(buf.String()))
+	capturedTerminalOut := strings.TrimSpace(buf.String())
+	lines := strings.Split(capturedTerminalOut, "\n")[4:]
+	a.commandState = strings.Join(lines, "\n")
 
-	fmt.Println("result:")
-	fmt.Println(a.commandState)
-	execRespCode, _ := a.cli.ContainerExecInspect(a.ctx, execResp.ID)
-	fmt.Printf("response code: %d\n", execRespCode.ExitCode)
+	//fmt.Println("result:")
+	//fmt.Println(a.commandState)
+
 }

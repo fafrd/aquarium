@@ -10,7 +10,7 @@ import (
 	"github.com/PullRequestInc/go-gpt3"
 )
 
-var basis = `You now have control of an Ubuntu Linux server. Your goal is to execute a port scan of amazon.com. Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.`
+var basis = "You now have control of an Ubuntu Linux server. Your goal is to execute a port scan of amazon.com. Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output."
 var initialPrompt = fmt.Sprintf(`%s
 
 Respond with a linux command to give to the server.`, basis)
