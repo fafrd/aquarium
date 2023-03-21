@@ -41,7 +41,9 @@ func genDialogue(prompt string, subject string) (string, error) {
 	ctx := context.Background()
 	client := gpt3.NewClient(apiKey)
 
-	resp, err := client.CompletionWithEngine(ctx, "text-davinci-001", gpt3.CompletionRequest{
+	fmt.Printf("Sending request to OpenAI:\n%s\n", aiPrompt)
+
+	resp, err := client.CompletionWithEngine(ctx, "text-davinci-003", gpt3.CompletionRequest{
 		Prompt:      []string{aiPrompt},
 		MaxTokens:   gpt3.IntPtr(tokens),
 		Temperature: gpt3.Float32Ptr(0.0),
@@ -51,6 +53,7 @@ func genDialogue(prompt string, subject string) (string, error) {
 		return "", err
 	}
 
-	sanitizedresponse := strings.Replace(resp.Choices[0].Text, "\n\n", "\n", -1)
-	return sanitizedresponse, nil
+	trimmedResponse := strings.TrimSpace(resp.Choices[0].Text)
+	sanitizedResponse := strings.Split(trimmedResponse, "\n")[0]
+	return sanitizedResponse, nil
 }

@@ -1,9 +1,11 @@
 package actor
 
 import (
-	//"aquarium/ai"
+	"aquarium/ai"
 	"bytes"
 	"fmt"
+	"io"
+	"strings"
 
 	"context"
 	"math/rand"
@@ -11,7 +13,6 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/stdcopy"
 
 	"time"
 )
@@ -77,7 +78,7 @@ func (a *Actor) Loop() <-chan struct{} {
 				return
 			default:
 				a.iteration()
-				time.Sleep(2 * time.Second)
+				time.Sleep(12 * time.Second)
 			}
 		}
 	}()
@@ -97,15 +98,11 @@ func (a *Actor) iteration() {
 	var nextCommand string
 	var err error
 
-	/*
-		if a.IterationCount == 1 {
-			nextCommand, err = ai.GenInitialDialogue()
-		} else {
-			nextCommand, err = ai.GenNextDialogue(a.commandState)
-		}
-	*/
-	// shortcut
-	nextCommand = "sudo nmap -sS -Pn -p- amazon.com"
+	if a.IterationCount == 1 {
+		nextCommand, err = ai.GenInitialDialogue()
+	} else {
+		nextCommand, err = ai.GenNextDialogue(a.commandState)
+	}
 
 	if err != nil {
 		handleError(err)
@@ -137,18 +134,19 @@ func (a *Actor) iteration() {
 	}
 	defer reader.Close()
 
-	var stdoutBuf, stderrBuf bytes.Buffer
-	if _, err := stdcopy.StdCopy(&stdoutBuf, &stderrBuf, reader.Reader); err != nil {
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, reader.Reader); err != nil {
 		handleError(err)
 		return
 	}
 
-	execRespCode, err := a.cli.ContainerExecInspect(a.ctx, execResp.ID)
+	// TODO fix the title here
+	a.commandState += fmt.Sprintf(`
+root@fec6b966da62:/# %s
+%s`, nextCommand, strings.TrimSpace(buf.String()))
 
-	fmt.Printf("execRespCode: %d\n", execRespCode.ExitCode)
-
-	//a.commandState = buf.String()
 	fmt.Println("result:")
-	fmt.Println(stdoutBuf.String())
-	fmt.Println(stderrBuf.String())
+	fmt.Println(a.commandState)
+	execRespCode, _ := a.cli.ContainerExecInspect(a.ctx, execResp.ID)
+	fmt.Printf("response code: %d\n", execRespCode.ExitCode)
 }
