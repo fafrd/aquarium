@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"context"
@@ -50,10 +51,15 @@ func (a *Actor) Loop() <-chan struct{} {
 		panic(err)
 	}
 
-	resp, err := cli.ContainerCreate(ctx, &container.Config{
-		Image: "instance",
-		Cmd:   []string{"tail", "-f", "/dev/null"},
-	}, nil, nil, nil, "")
+	resp, err := cli.ContainerCreate(ctx,
+		&container.Config{
+			Image: "instance",
+			Cmd:   []string{"tail", "-f", "/dev/null"}, // wait indefinitely
+		},
+		&container.HostConfig{
+			NetworkMode: "aquarium",
+			SecurityOpt: []string{"apparmor:unconfined"},
+		}, nil, nil, "")
 	if err != nil {
 		panic(err)
 	}
@@ -119,6 +125,38 @@ func (a *Actor) iteration() {
 		close(a.quit)
 	}
 
+	getProcs := func() (procs map[int]string, count int, err error) {
+		// create operator connection
+		operatorExecConfig, err := a.cli.ContainerExecCreate(a.ctx, a.containerId, types.ExecConfig{
+			Cmd:          []string{"ps", "-u", "root,ubuntu", "-o", "pid=,user=,comm="},
+			AttachStderr: false,
+			AttachStdout: true,
+		})
+		if err != nil {
+			return nil, 0, err
+		}
+		operatorExecConnection, err := a.cli.ContainerExecAttach(a.ctx, operatorExecConfig.ID, types.ExecStartCheck{})
+		if err != nil {
+			return nil, 0, err
+		}
+		var buf bytes.Buffer
+		if _, err := io.Copy(&buf, operatorExecConnection.Reader); err != nil {
+			return nil, 0, err
+		}
+
+		kv := make(map[int]string)
+		lines := strings.Split(buf.String(), "\n")
+		for _, line := range lines {
+			fields := strings.Fields(line)
+			if len(fields) == 3 {
+				pid := 0
+				fmt.Sscanf(fields[0], "%d", &pid)
+				kv[pid] = fields[1]
+			}
+		}
+		return kv, len(kv), nil
+	}
+
 	a.IterationCount++
 	fmt.Printf("%s iteration %d\n", a.Id, a.IterationCount)
 
@@ -137,15 +175,40 @@ func (a *Actor) iteration() {
 		return
 	}
 
+	// rewrite apt-get as apt-get -y
+	pattern := regexp.MustCompile(`(apt(?:-get)?\s+(?:install|upgrade)\s+)(\S+)`)
+	replacement := "${1}-y $2"
+	nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
+
+	_, initialProcCount, err := getProcs()
+	if err != nil {
+		handleError(err)
+		return
+	}
+
 	// Execute command in container
 	fmt.Printf("%s iteration %d: executing %s\n", a.Id, a.IterationCount, nextCommand)
 	a.terminalConnection.Conn.Write([]byte(nextCommand + "\n"))
 
-	// wait for command to finish
-	time.Sleep(5 * time.Second) // TODO not correct
+	// wait for command to finish- poll getProcs until it returns the initial # of processes
+	// (kind of a hacky approach)
+	time.Sleep(250 * time.Millisecond)
+	for {
+		procs, procCount, err := getProcs()
+		fmt.Printf("%s iteration %d: %d processes (initial proc count %d)\n", a.Id, a.IterationCount, procCount, initialProcCount)
+		fmt.Println(procs)
+		if err != nil {
+			handleError(err)
+			return
+		}
+		if procCount == initialProcCount {
+			break
+		}
+		fmt.Println("waiting for command to finish...")
+		time.Sleep(1 * time.Second)
+	}
 
 	// read output
-	// create operator connection to terminal (secondary connection for administration)
 	operatorExecConfig, err := a.cli.ContainerExecCreate(a.ctx, a.containerId, types.ExecConfig{
 		Cmd:          []string{"cat", fmt.Sprintf("/tmp/out-%s", a.Id)},
 		AttachStderr: true,
@@ -155,13 +218,11 @@ func (a *Actor) iteration() {
 		handleError(err)
 		return
 	}
-
 	operatorExecConnection, err := a.cli.ContainerExecAttach(a.ctx, operatorExecConfig.ID, types.ExecStartCheck{})
 	if err != nil {
 		handleError(err)
 		return
 	}
-
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, operatorExecConnection.Reader); err != nil {
 		handleError(err)
@@ -171,8 +232,5 @@ func (a *Actor) iteration() {
 	capturedTerminalOut := strings.TrimSpace(buf.String())
 	lines := strings.Split(capturedTerminalOut, "\n")[4:]
 	a.commandState = strings.Join(lines, "\n")
-
-	//fmt.Println("result:")
-	//fmt.Println(a.commandState)
 
 }

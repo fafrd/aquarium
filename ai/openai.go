@@ -19,7 +19,7 @@ var nextPrompt = fmt.Sprintf(`%s
 Previous commands and output:
 %%s
 
-Respond with a linux command to give to the server.`, basis)
+Give the next input to the terminal.`, basis)
 var tokens = 100
 
 func GenInitialDialogue() (string, error) {
