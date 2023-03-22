@@ -43,7 +43,7 @@ func NewActor() *Actor {
 
 func (a *Actor) Loop() <-chan struct{} {
 	done := make(chan struct{})
-	logger.Log("%s Starting actor loop\n", a.Id)
+	logger.Logf("%s Starting actor loop\n", a.Id)
 
 	// instantiate docker container
 	ctx := context.Background()
@@ -74,7 +74,7 @@ func (a *Actor) Loop() <-chan struct{} {
 		panic(err)
 	}
 
-	logger.Log("%s Container started with id %s\n", a.Id, a.containerId)
+	logger.Logf("%s Container started with id %s\n", a.Id, a.containerId)
 
 	// create actor connection to terminal
 	terminalExecConfig, err := cli.ContainerExecCreate(ctx, a.containerId, types.ExecConfig{
@@ -102,7 +102,46 @@ func (a *Actor) Loop() <-chan struct{} {
 	a.cli = cli
 	a.ctx = ctx
 
-	logger.Log("%s Container terminal attached: %s\n", a.Id, a.containerId)
+	logger.Logf("%s Container terminal attached: %s\n", a.Id, a.containerId)
+
+	// Log all output from actor's terminal to logger.LogTerminalf()
+	go func() {
+		bytesLoggedSoFar := 0
+		for {
+			time.Sleep(50 * time.Millisecond) // terminal logging interval
+
+			// read output
+			operatorExecConfig, err := a.cli.ContainerExecCreate(a.ctx, a.containerId, types.ExecConfig{
+				Cmd:          []string{"ansifilter", "/tmp/out"},
+				AttachStdin:  true,
+				AttachStderr: true,
+				AttachStdout: true,
+			})
+			if err != nil {
+				logger.Logf("Docker terminal logging error: %s\n", err)
+				return
+			}
+			operatorExecConnection, err := a.cli.ContainerExecAttach(a.ctx, operatorExecConfig.ID, types.ExecStartCheck{})
+			if err != nil {
+				logger.Logf("Docker terminal logging error: %s\n", err)
+				return
+			}
+			var buf bytes.Buffer
+			if _, err := io.Copy(&buf, operatorExecConnection.Reader); err != nil {
+				logger.Logf("Docker terminal logging error: %s\n", err)
+				return
+			}
+
+			capturedTerminalOut := buf.String()
+
+			// now, log bytes that we have not yet logged
+			if len(capturedTerminalOut) > bytesLoggedSoFar {
+				raw := capturedTerminalOut[bytesLoggedSoFar:]
+				logger.LogTerminalf(raw)
+				bytesLoggedSoFar = len(capturedTerminalOut)
+			}
+		}
+	}()
 
 	go func() {
 		defer close(done)
@@ -122,7 +161,7 @@ func (a *Actor) Loop() <-chan struct{} {
 
 func (a *Actor) iteration() {
 	handleError := func(err error) {
-		logger.Log("Actor %s fatal error: %s\n", a.Id, err)
+		logger.Logf("Actor %s fatal error: %s\n", a.Id, err)
 		close(a.quit)
 	}
 
@@ -159,7 +198,7 @@ func (a *Actor) iteration() {
 	}
 
 	a.IterationCount++
-	logger.Log("%s iteration %d\n", a.Id, a.IterationCount)
+	logger.Logf("%s iteration %d\n", a.Id, a.IterationCount)
 
 	var nextCommand string
 	var err error
@@ -170,7 +209,7 @@ func (a *Actor) iteration() {
 		nextCommand, err = ai.GenNextDialogue(a.commandState)
 	}
 	// shortcut
-	//nextCommand = "mkdir test && cd test && pwd"
+	//nextCommand = "apt-get update"
 	if err != nil {
 		handleError(err)
 		return
@@ -188,7 +227,7 @@ func (a *Actor) iteration() {
 	}
 
 	// Execute command in container
-	logger.Log("%s iteration %d: executing %s\n", a.Id, a.IterationCount, nextCommand)
+	logger.Logf("%s iteration %d: executing %s\n", a.Id, a.IterationCount, nextCommand)
 	a.terminalConnection.Conn.Write([]byte(nextCommand + "\n"))
 
 	// wait for command to finish- poll getProcs until it returns the initial # of processes
@@ -196,7 +235,7 @@ func (a *Actor) iteration() {
 	time.Sleep(250 * time.Millisecond)
 	for {
 		_, procCount, err := getProcs()
-		//logger.Log("%s iteration %d: %d processes (initial proc count %d)\n", a.Id, a.IterationCount, procCount, initialProcCount)
+		//logger.Logf("%s iteration %d: %d processes (initial proc count %d)\n", a.Id, a.IterationCount, procCount, initialProcCount)
 		if err != nil {
 			handleError(err)
 			return
@@ -204,8 +243,8 @@ func (a *Actor) iteration() {
 		if procCount == initialProcCount {
 			break
 		}
-		logger.Log("%s iteration %d: waiting for command to finish...\n", a.Id, a.IterationCount)
-		time.Sleep(1 * time.Second)
+		logger.Logf("%s iteration %d: waiting for command to finish...\n", a.Id, a.IterationCount)
+		time.Sleep(2 * time.Second)
 	}
 
 	// read output
@@ -230,7 +269,7 @@ func (a *Actor) iteration() {
 	}
 
 	capturedTerminalOut := strings.TrimSpace(buf.String())
-	lines := strings.Split(capturedTerminalOut, "\n")[4:]
+	lines := strings.Split(capturedTerminalOut, "\n")[3:]
 	// todo- only pass the last 40 or so lines?
 	a.commandState = strings.Join(lines, "\n")
 

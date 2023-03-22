@@ -1,5 +1,5 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
-RUN apt-get update && apt-get install sudo psmisc &&\
+RUN apt-get update && apt-get install sudo psmisc ansifilter &&\
     useradd -m -s /bin/bash -p "" ubuntu &&\
     echo "ubuntu ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers

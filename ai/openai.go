@@ -41,7 +41,7 @@ func genDialogue(prompt string, subject string) (string, error) {
 	ctx := context.Background()
 	client := gpt3.NewClient(apiKey)
 
-	//fmt.Printf("Sending request to OpenAI:\n%s\n", aiPrompt)
+	//logger.Logf("Sending request to OpenAI:\n%s\n", aiPrompt)
 
 	resp, err := client.CompletionWithEngine(ctx, "text-davinci-003", gpt3.CompletionRequest{
 		Prompt:      []string{aiPrompt},

@@ -70,8 +70,8 @@ func Init(_logch chan string, _termch chan string) {
 	}
 }
 
-// Log sends the log message along the default logger channel
-func Log(msg string, args ...interface{}) {
+// Logf sends the log message along the default logger channel
+func Logf(msg string, args ...interface{}) {
 	if logch == nil {
 		panic("logger not initialized")
 	}
@@ -85,8 +85,8 @@ func Log(msg string, args ...interface{}) {
 	}
 }
 
-// LogTerminal sends the log message along a different channel
-func LogTerminal(msg string, args ...interface{}) {
+// LogTerminalf sends the log message along a different channel
+func LogTerminalf(msg string, args ...interface{}) {
 	if termch == nil {
 		panic("logger not initialized")
 	}
@@ -100,3 +100,28 @@ func LogTerminal(msg string, args ...interface{}) {
 		termch <- fmt.Sprintf("Error writing to log file: %s", err)
 	}
 }
+
+/*
+const debugFilename = "debug.log"
+func Debugf(msg string, args ...interface{}) {
+	var debugFile *os.File
+	if _, err := os.Stat(debugFilename); os.IsNotExist(err) {
+		debugFile, err = os.Create(debugFilename)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		debugFile, err = os.OpenFile(debugFilename, os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	msgFormatted := fmt.Sprintf(msg, args...)
+	_, err := debugFile.WriteString(msgFormatted)
+	if err != nil {
+		logch <- fmt.Sprintf("Error writing to log file: %s", err)
+	}
+
+}
+*/

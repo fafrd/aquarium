@@ -21,8 +21,9 @@ type AppendContentMsg struct {
 	terminalContent string
 }
 
-const useHighPerformanceRenderer = false
 const gap = 8
+
+var termLogStarted = false
 
 type model struct {
 	logContent      string
@@ -54,16 +55,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.ready {
 			m.viewportLeft = viewport.New(width, msg.Height-headerHeight)
 			m.viewportLeft.YPosition = headerHeight
-			m.viewportLeft.HighPerformanceRendering = useHighPerformanceRenderer
-
 			m.viewportRight = viewport.New(width, msg.Height-headerHeight)
 			m.viewportRight.YPosition = headerHeight
-			m.viewportRight.HighPerformanceRendering = useHighPerformanceRenderer
-			m.viewportRight.SetContent(m.terminalContent)
-			m.ready = true
-
 			m.viewportLeft.YPosition = headerHeight + 1
 			m.viewportRight.YPosition = headerHeight + 1
+			m.ready = true
 		} else {
 			m.viewportLeft.Width = width
 			m.viewportLeft.Height = msg.Height - headerHeight
@@ -72,20 +68,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		wrappedContentLeft := wordwrap.String(m.logContent, width)
 		m.viewportLeft.SetContent(wrappedContentLeft)
+
 		wrappedContentRight := wrap.String(m.terminalContent, width)
 		m.viewportRight.SetContent(wrappedContentRight)
-
-		if useHighPerformanceRenderer {
-			cmds = append(cmds, viewport.Sync(m.viewportLeft), viewport.Sync(m.viewportRight))
-		}
 	case AppendContentMsg:
+		//logger.Debugf("Recieved msg. msg.logContent: %s; msg.terminalContent: %s\n\n", msg.logContent, msg.terminalContent)
+
 		if msg.logContent != "" {
-			m.logContent += "\n" + msg.logContent
+			m.logContent += msg.logContent
 			wrappedContentLeft := wordwrap.String(m.logContent, m.viewportLeft.Width)
 			m.viewportLeft.SetContent(wrappedContentLeft)
 		}
 
 		if msg.terminalContent != "" {
+			if !termLogStarted {
+				m.terminalContent = ""
+				termLogStarted = true
+			}
 			m.terminalContent += msg.terminalContent
 			wrappedContentRight := wrap.String(m.terminalContent, m.viewportRight.Width)
 			m.viewportRight.SetContent(wrappedContentRight)
@@ -94,6 +93,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ALWAYS scroll to the bottom
 	m.viewportLeft.SetYOffset(99999999999)
+	m.viewportRight.SetYOffset(99999999999)
 
 	// Handle keyboard and mouse events in the viewport
 	m.viewportLeft, cmd = m.viewportLeft.Update(msg)
@@ -129,8 +129,6 @@ func main() {
 	termch := make(chan string, 100) // terminal log messages; each one is appended directly to end
 	logger.Init(logch, termch)
 
-	//lorem := "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse condimentum neque a purus condimentum tincidunt. Aliquam ut nunc velit. Sed commodo purus non vestibulum placerat. Vivamus tortor dolor, vestibulum non volutpat ut, convallis eu dui. Nam ullamcorper mattis molestie. Maecenas vestibulum sapien nisl, vel iaculis nisi convallis ac. Aenean rhoncus rutrum dui. Suspendisse bibendum purus a mauris ornare ultricies. Maecenas sit amet nunc pellentesque, ullamcorper elit non, egestas tortor."
-
 	p := tea.NewProgram(
 		model{logContent: "", terminalContent: string("Container not started.")},
 		tea.WithAltScreen(),
@@ -148,19 +146,6 @@ func main() {
 			p.Send(AppendContentMsg{terminalContent: string(termMessage)})
 		}
 	}()
-
-	/*
-		go func() {
-			time.Sleep(1 * time.Second)
-			logger.Log("Log message 1 %s, %d", "test", 1)
-			logger.LogTerminal("term Log message 1 %s, %d", "testr2", 4)
-		}()
-		go func() {
-			time.Sleep(1 * time.Second)
-			logger.Log("Log message 2")
-			logger.LogTerminal("term Log message 2")
-		}()
-	*/
 
 	go func() {
 		actor := actor.NewActor()
