@@ -23,8 +23,6 @@ type AppendContentMsg struct {
 
 const gap = 8
 
-var termLogStarted = false
-
 type model struct {
 	logContent      string
 	terminalContent string
@@ -81,11 +79,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.terminalContent != "" {
-			if !termLogStarted {
-				m.terminalContent = ""
-				termLogStarted = true
-			}
-			m.terminalContent += msg.terminalContent
+			m.terminalContent = msg.terminalContent
 			wrappedContentRight := wrap.String(m.terminalContent, m.viewportRight.Width)
 			m.viewportRight.SetContent(wrappedContentRight)
 		}
@@ -125,8 +119,8 @@ func max(a, b int) int {
 }
 
 func main() {
-	logch := make(chan string, 100)  // general log messages; each one is prepended with newline
-	termch := make(chan string, 100) // terminal log messages; each one is appended directly to end
+	logch := make(chan string, 100)  // general log messages; each one is appended (with newline)
+	termch := make(chan string, 100) // terminal log messages; each one completely replaces the previous
 	logger.Init(logch, termch)
 
 	p := tea.NewProgram(

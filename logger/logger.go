@@ -58,7 +58,7 @@ func Init(_logch chan string, _termch chan string) {
 			panic(err)
 		}
 	} else {
-		logTerminalFile, err = os.OpenFile(logTerminalFilename, os.O_APPEND|os.O_WRONLY, 0644)
+		logTerminalFile, err = os.OpenFile(logTerminalFilename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 		if err != nil {
 			panic(err)
 		}
@@ -71,6 +71,7 @@ func Init(_logch chan string, _termch chan string) {
 }
 
 // Logf sends the log message along the default logger channel
+// and appends to aquarium.log
 func Logf(msg string, args ...interface{}) {
 	if logch == nil {
 		panic("logger not initialized")
@@ -86,6 +87,7 @@ func Logf(msg string, args ...interface{}) {
 }
 
 // LogTerminalf sends the log message along a different channel
+// and completely replaces the current terminal.log file with a new one
 func LogTerminalf(msg string, args ...interface{}) {
 	if termch == nil {
 		panic("logger not initialized")
@@ -95,7 +97,17 @@ func LogTerminalf(msg string, args ...interface{}) {
 
 	termch <- msgFormatted
 
-	_, err := logTerminalFile.WriteString(msgFormatted)
+	err := logTerminalFile.Truncate(0)
+	if err != nil {
+		termch <- fmt.Sprintf("Error writing to log file: %s", err)
+	}
+
+	_, err = logTerminalFile.Seek(0, 0)
+	if err != nil {
+		termch <- fmt.Sprintf("Error writing to log file: %s", err)
+	}
+
+	_, err = logTerminalFile.WriteString(msgFormatted)
 	if err != nil {
 		termch <- fmt.Sprintf("Error writing to log file: %s", err)
 	}

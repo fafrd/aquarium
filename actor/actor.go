@@ -106,13 +106,12 @@ func (a *Actor) Loop() <-chan struct{} {
 
 	// Log all output from actor's terminal to logger.LogTerminalf()
 	go func() {
-		bytesLoggedSoFar := 0
 		for {
 			time.Sleep(50 * time.Millisecond) // terminal logging interval
 
 			// read output
 			operatorExecConfig, err := a.cli.ContainerExecCreate(a.ctx, a.containerId, types.ExecConfig{
-				Cmd:          []string{"ansifilter", "/tmp/out"},
+				Cmd:          []string{"/bin/bash", "-c", "/tmp/logterm"},
 				AttachStdin:  true,
 				AttachStderr: true,
 				AttachStdout: true,
@@ -126,20 +125,46 @@ func (a *Actor) Loop() <-chan struct{} {
 				logger.Logf("Docker terminal logging error: %s\n", err)
 				return
 			}
+
 			var buf bytes.Buffer
 			if _, err := io.Copy(&buf, operatorExecConnection.Reader); err != nil {
 				logger.Logf("Docker terminal logging error: %s\n", err)
 				return
 			}
 
+			// The start of the buffer usually has some garbage bytes; read until the first ASCII
+			for {
+				bb, err := buf.ReadByte()
+				if err != nil {
+					break // end of buffer reached
+				}
+
+				if bb >= 32 && bb <= 126 {
+					// found the first ASCII character, create a new buffer with the remaining bytes
+					newBuf := bytes.NewBuffer([]byte{bb})
+					newBuf.ReadFrom(&buf)
+					buf = *newBuf
+					break
+				}
+			}
+
 			capturedTerminalOut := buf.String()
 
-			// now, log bytes that we have not yet logged
-			if len(capturedTerminalOut) > bytesLoggedSoFar {
-				raw := capturedTerminalOut[bytesLoggedSoFar:]
-				logger.LogTerminalf(raw)
-				bytesLoggedSoFar = len(capturedTerminalOut)
+			raw := capturedTerminalOut
+			var sanitized string
+			raw = strings.ReplaceAll(raw, "\r", "\n")
+			raw = strings.ReplaceAll(raw, "\n\n\n", "\n")
+			raw = strings.ReplaceAll(raw, "\n\n", "\n")
+			raw = strings.ReplaceAll(raw, "%", "%%")
+
+			// remove any remaining lines that are pure whitespace
+			for _, line := range strings.Split(raw, "\n") {
+				if strings.TrimSpace(line) != "" {
+					sanitized += line + "\n"
+				}
 			}
+
+			logger.LogTerminalf(sanitized)
 		}
 	}()
 
@@ -209,7 +234,7 @@ func (a *Actor) iteration() {
 		nextCommand, err = ai.GenNextDialogue(a.commandState)
 	}
 	// shortcut
-	//nextCommand = "apt-get update"
+	//nextCommand = "sudo nmap -sV amazon.com"
 	if err != nil {
 		handleError(err)
 		return
