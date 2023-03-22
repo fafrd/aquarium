@@ -2,6 +2,7 @@ package actor
 
 import (
 	"aquarium/ai"
+	"aquarium/logger"
 	"bytes"
 	"fmt"
 	"io"
@@ -42,7 +43,7 @@ func NewActor() *Actor {
 
 func (a *Actor) Loop() <-chan struct{} {
 	done := make(chan struct{})
-	fmt.Printf("%s Starting actor loop\n", a.Id)
+	logger.Log("%s Starting actor loop\n", a.Id)
 
 	// instantiate docker container
 	ctx := context.Background()
@@ -73,7 +74,7 @@ func (a *Actor) Loop() <-chan struct{} {
 		panic(err)
 	}
 
-	fmt.Printf("%s Container started with id %s\n", a.Id, a.containerId)
+	logger.Log("%s Container started with id %s\n", a.Id, a.containerId)
 
 	// create actor connection to terminal
 	terminalExecConfig, err := cli.ContainerExecCreate(ctx, a.containerId, types.ExecConfig{
@@ -95,13 +96,13 @@ func (a *Actor) Loop() <-chan struct{} {
 	// initialize terminal
 	terminalExecConnection.Conn.Write([]byte("su ubuntu\n"))
 	terminalExecConnection.Conn.Write([]byte("cd\n"))
-	terminalExecConnection.Conn.Write([]byte(fmt.Sprintf("script -f /tmp/out-%s\n", a.Id))) // write all terminal output to file /tmp/out-id
+	terminalExecConnection.Conn.Write([]byte("script -f /tmp/out\n")) // write all terminal output to file /tmp/out
 	terminalExecConnection.Conn.Write([]byte("/bin/bash\n"))
 	a.terminalConnection = terminalExecConnection
 	a.cli = cli
 	a.ctx = ctx
 
-	fmt.Printf("%s Container terminal attached: %s\n", a.Id, a.containerId)
+	logger.Log("%s Container terminal attached: %s\n", a.Id, a.containerId)
 
 	go func() {
 		defer close(done)
@@ -121,7 +122,7 @@ func (a *Actor) Loop() <-chan struct{} {
 
 func (a *Actor) iteration() {
 	handleError := func(err error) {
-		fmt.Printf("Actor %s fatal error: %s\n", a.Id, err)
+		logger.Log("Actor %s fatal error: %s\n", a.Id, err)
 		close(a.quit)
 	}
 
@@ -158,7 +159,7 @@ func (a *Actor) iteration() {
 	}
 
 	a.IterationCount++
-	fmt.Printf("%s iteration %d\n", a.Id, a.IterationCount)
+	logger.Log("%s iteration %d\n", a.Id, a.IterationCount)
 
 	var nextCommand string
 	var err error
@@ -187,16 +188,15 @@ func (a *Actor) iteration() {
 	}
 
 	// Execute command in container
-	fmt.Printf("%s iteration %d: executing %s\n", a.Id, a.IterationCount, nextCommand)
+	logger.Log("%s iteration %d: executing %s\n", a.Id, a.IterationCount, nextCommand)
 	a.terminalConnection.Conn.Write([]byte(nextCommand + "\n"))
 
 	// wait for command to finish- poll getProcs until it returns the initial # of processes
 	// (kind of a hacky approach)
 	time.Sleep(250 * time.Millisecond)
 	for {
-		procs, procCount, err := getProcs()
-		fmt.Printf("%s iteration %d: %d processes (initial proc count %d)\n", a.Id, a.IterationCount, procCount, initialProcCount)
-		fmt.Println(procs)
+		_, procCount, err := getProcs()
+		//logger.Log("%s iteration %d: %d processes (initial proc count %d)\n", a.Id, a.IterationCount, procCount, initialProcCount)
 		if err != nil {
 			handleError(err)
 			return
@@ -204,13 +204,13 @@ func (a *Actor) iteration() {
 		if procCount == initialProcCount {
 			break
 		}
-		fmt.Println("waiting for command to finish...")
+		logger.Log("%s iteration %d: waiting for command to finish...\n", a.Id, a.IterationCount)
 		time.Sleep(1 * time.Second)
 	}
 
 	// read output
 	operatorExecConfig, err := a.cli.ContainerExecCreate(a.ctx, a.containerId, types.ExecConfig{
-		Cmd:          []string{"cat", fmt.Sprintf("/tmp/out-%s", a.Id)},
+		Cmd:          []string{"cat", "/tmp/out"},
 		AttachStderr: true,
 		AttachStdout: true,
 	})
@@ -231,6 +231,7 @@ func (a *Actor) iteration() {
 
 	capturedTerminalOut := strings.TrimSpace(buf.String())
 	lines := strings.Split(capturedTerminalOut, "\n")[4:]
+	// todo- only pass the last 40 or so lines?
 	a.commandState = strings.Join(lines, "\n")
 
 }
