@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"aquarium/logger"
 	"context"
 	"errors"
 	"fmt"
@@ -10,7 +11,9 @@ import (
 	"github.com/PullRequestInc/go-gpt3"
 )
 
-var basis = "You now have control of an Ubuntu Linux server. Your goal is to execute a port scan of amazon.com. Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output."
+var Command = "Your goal is to execute a verbose port scan of amazon.com."
+var basis = fmt.Sprintf("You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.",
+	Command)
 var initialPrompt = fmt.Sprintf(`%s
 
 Respond with a linux command to give to the server.`, basis)
@@ -41,7 +44,7 @@ func genDialogue(prompt string, subject string) (string, error) {
 	ctx := context.Background()
 	client := gpt3.NewClient(apiKey)
 
-	//logger.Logf("Sending request to OpenAI:\n%s\n", aiPrompt)
+	logger.Debugf("Sending request to OpenAI:\n%s\n", aiPrompt)
 
 	resp, err := client.CompletionWithEngine(ctx, "text-davinci-003", gpt3.CompletionRequest{
 		Prompt:      []string{aiPrompt},

@@ -113,8 +113,8 @@ func LogTerminalf(msg string, args ...interface{}) {
 	}
 }
 
-/*
 const debugFilename = "debug.log"
+
 func Debugf(msg string, args ...interface{}) {
 	var debugFile *os.File
 	if _, err := os.Stat(debugFilename); os.IsNotExist(err) {
@@ -136,4 +136,3 @@ func Debugf(msg string, args ...interface{}) {
 	}
 
 }
-*/

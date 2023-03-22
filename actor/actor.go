@@ -43,7 +43,8 @@ func NewActor() *Actor {
 
 func (a *Actor) Loop() <-chan struct{} {
 	done := make(chan struct{})
-	logger.Logf("%s Starting actor loop\n", a.Id)
+	logger.Logf("%s Starting actor loop.\n", a.Id)
+	logger.Logf("%s Prompt: %s\n", a.Id, ai.Command)
 
 	// instantiate docker container
 	ctx := context.Background()
@@ -109,62 +110,13 @@ func (a *Actor) Loop() <-chan struct{} {
 		for {
 			time.Sleep(50 * time.Millisecond) // terminal logging interval
 
-			// read output
-			operatorExecConfig, err := a.cli.ContainerExecCreate(a.ctx, a.containerId, types.ExecConfig{
-				Cmd:          []string{"/bin/bash", "-c", "/tmp/logterm"},
-				AttachStdin:  true,
-				AttachStderr: true,
-				AttachStdout: true,
-			})
-			if err != nil {
-				logger.Logf("Docker terminal logging error: %s\n", err)
-				return
-			}
-			operatorExecConnection, err := a.cli.ContainerExecAttach(a.ctx, operatorExecConfig.ID, types.ExecStartCheck{})
+			output, err := a.ReadTerminalOut()
 			if err != nil {
 				logger.Logf("Docker terminal logging error: %s\n", err)
 				return
 			}
 
-			var buf bytes.Buffer
-			if _, err := io.Copy(&buf, operatorExecConnection.Reader); err != nil {
-				logger.Logf("Docker terminal logging error: %s\n", err)
-				return
-			}
-
-			// The start of the buffer usually has some garbage bytes; read until the first ASCII
-			for {
-				bb, err := buf.ReadByte()
-				if err != nil {
-					break // end of buffer reached
-				}
-
-				if bb >= 32 && bb <= 126 {
-					// found the first ASCII character, create a new buffer with the remaining bytes
-					newBuf := bytes.NewBuffer([]byte{bb})
-					newBuf.ReadFrom(&buf)
-					buf = *newBuf
-					break
-				}
-			}
-
-			capturedTerminalOut := buf.String()
-
-			raw := capturedTerminalOut
-			var sanitized string
-			raw = strings.ReplaceAll(raw, "\r", "\n")
-			raw = strings.ReplaceAll(raw, "\n\n\n", "\n")
-			raw = strings.ReplaceAll(raw, "\n\n", "\n")
-			raw = strings.ReplaceAll(raw, "%", "%%")
-
-			// remove any remaining lines that are pure whitespace
-			for _, line := range strings.Split(raw, "\n") {
-				if strings.TrimSpace(line) != "" {
-					sanitized += line + "\n"
-				}
-			}
-
-			logger.LogTerminalf(sanitized)
+			logger.LogTerminalf("%s", output)
 		}
 	}()
 
@@ -176,7 +128,7 @@ func (a *Actor) Loop() <-chan struct{} {
 				return
 			default:
 				a.iteration()
-				time.Sleep(5 * time.Second)
+				time.Sleep(2 * time.Second) // actor loop interval
 			}
 		}
 	}()
@@ -234,7 +186,7 @@ func (a *Actor) iteration() {
 		nextCommand, err = ai.GenNextDialogue(a.commandState)
 	}
 	// shortcut
-	//nextCommand = "sudo nmap -sV amazon.com"
+	//nextCommand = "sudo nmap -v amazon.com"
 	if err != nil {
 		handleError(err)
 		return
@@ -256,8 +208,9 @@ func (a *Actor) iteration() {
 	a.terminalConnection.Conn.Write([]byte(nextCommand + "\n"))
 
 	// wait for command to finish- poll getProcs until it returns the initial # of processes
-	// (kind of a hacky approach)
+	// TODO checking num procs is a brittle approach
 	time.Sleep(250 * time.Millisecond)
+	waitMessageSent := false
 	for {
 		_, procCount, err := getProcs()
 		//logger.Logf("%s iteration %d: %d processes (initial proc count %d)\n", a.Id, a.IterationCount, procCount, initialProcCount)
@@ -268,34 +221,78 @@ func (a *Actor) iteration() {
 		if procCount == initialProcCount {
 			break
 		}
-		logger.Logf("%s iteration %d: waiting for command to finish...\n", a.Id, a.IterationCount)
-		time.Sleep(2 * time.Second)
+		if !waitMessageSent {
+			logger.Logf("%s iteration %d: waiting for command to finish...\n", a.Id, a.IterationCount)
+			waitMessageSent = true
+		}
+		time.Sleep(1 * time.Second)
 	}
 
 	// read output
+	output, err := a.ReadTerminalOut()
+	if err != nil {
+		handleError(err)
+		return
+	}
+
+	// TODO- only keep the last ~40 lines or so of output?
+	// ideally, send the AI the list of commands run so far and the output from just the last one
+
+	a.commandState = output
+}
+
+func (a *Actor) ReadTerminalOut() (string, error) {
+	// read output
 	operatorExecConfig, err := a.cli.ContainerExecCreate(a.ctx, a.containerId, types.ExecConfig{
-		Cmd:          []string{"cat", "/tmp/out"},
+		Cmd:          []string{"/bin/bash", "-c", "/tmp/logterm"},
+		AttachStdin:  true,
 		AttachStderr: true,
 		AttachStdout: true,
 	})
 	if err != nil {
-		handleError(err)
-		return
+		return "", err
 	}
 	operatorExecConnection, err := a.cli.ContainerExecAttach(a.ctx, operatorExecConfig.ID, types.ExecStartCheck{})
 	if err != nil {
-		handleError(err)
-		return
+		return "", err
 	}
+
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, operatorExecConnection.Reader); err != nil {
-		handleError(err)
-		return
+		return "", err
 	}
 
-	capturedTerminalOut := strings.TrimSpace(buf.String())
-	lines := strings.Split(capturedTerminalOut, "\n")[3:]
-	// todo- only pass the last 40 or so lines?
-	a.commandState = strings.Join(lines, "\n")
+	// The start of the buffer usually has some garbage bytes; read until the first ASCII
+	for {
+		bb, err := buf.ReadByte()
+		if err != nil {
+			break // end of buffer reached
+		}
 
+		if bb >= 32 && bb <= 126 {
+			// found the first ASCII character, create a new buffer with the remaining bytes
+			newBuf := bytes.NewBuffer([]byte{bb})
+			newBuf.ReadFrom(&buf)
+			buf = *newBuf
+			break
+		}
+	}
+
+	capturedTerminalOut := buf.String()
+
+	raw := capturedTerminalOut
+	var sanitized string
+	raw = strings.ReplaceAll(raw, "\r", "\n")
+	raw = strings.ReplaceAll(raw, "\n\n\n", "\n")
+	raw = strings.ReplaceAll(raw, "\n\n", "\n")
+	//raw = strings.ReplaceAll(raw, "%", "%%")
+
+	// remove any remaining lines that are pure whitespace
+	for _, line := range strings.Split(raw, "\n") {
+		if strings.TrimSpace(line) != "" {
+			sanitized += line + "\n"
+		}
+	}
+
+	return sanitized, nil
 }
