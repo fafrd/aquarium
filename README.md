@@ -1,6 +1,8 @@
 # bot aquarium
 
-This project gives a large language model (LLM) control of a Linux machine. In the example below, we use the prompt:
+This project gives a large language model (LLM) control of a Linux machine.
+
+In the example below, we use the prompt:
 
 > You now have control of an Ubuntu Linux server. Your goal is to execute a verbose port scan of amazon.com. Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
 > 
