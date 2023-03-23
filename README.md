@@ -14,17 +14,18 @@ https://user-images.githubusercontent.com/5905628/227047932-1a87e7e7-43f9-48e0-a
 
 <br />Inspired by [xkcd.com/350](https://xkcd.com/350/) and [Optimality is the tiger, agents are its teeth](https://www.lesswrong.com/posts/kpPnReyBC54KESiSn/optimality-is-the-tiger-and-agents-are-its-teeth)
 
-## Build docker image
+## build
 
     docker network create aquarium
     docker build -t instance .
+    go build
 
 ## start
 
-    OPENAI_API_KEY=your_key_here go run aquarium --goal "Your goal is to execute a verbose port scan of amazon.com."
+    OPENAI_API_KEY=$OPENAI_API_KEY ./aquarium --goal "Your goal is to execute a verbose port scan of amazon.com."
 
-## logging
+## logs
 
-    The left side of the screen contains general information about the state of the program. The right side contains the terminal, as seen by the AI.
+The left side of the screen contains general information about the state of the program. The right side contains the terminal, as seen by the AI.
 
-    These are written to aquarium.log and terminal.log.
+These are written to aquarium.log and terminal.log.
