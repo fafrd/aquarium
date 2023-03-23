@@ -57,7 +57,7 @@ func (a *Actor) Loop() <-chan struct{} {
 
 	resp, err := cli.ContainerCreate(ctx,
 		&container.Config{
-			Image: "instance",
+			Image: "aquarium",
 			Cmd:   []string{"tail", "-f", "/dev/null"}, // wait indefinitely
 		},
 		&container.HostConfig{

@@ -17,7 +17,7 @@ https://user-images.githubusercontent.com/5905628/227047932-1a87e7e7-43f9-48e0-a
 ## build
 
     docker network create aquarium
-    docker build -t instance .
+    docker build -t aquarium .
     go build
 
 ## start
