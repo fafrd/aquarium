@@ -21,4 +21,10 @@ https://user-images.githubusercontent.com/5905628/227047932-1a87e7e7-43f9-48e0-a
 
 ## start
 
-    OPENAI_API_KEY=your_key_here go run aquarium
+    OPENAI_API_KEY=your_key_here go run aquarium --goal "Your goal is to execute a verbose port scan of amazon.com."
+
+## logging
+
+    The left side of the screen contains general information about the state of the program. The right side contains the terminal, as seen by the AI.
+
+    These are written to aquarium.log and terminal.log.

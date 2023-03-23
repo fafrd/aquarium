@@ -8,6 +8,7 @@ import (
 
 var logch chan string
 var termch chan string
+var debug bool
 
 var logFile *os.File
 var logTerminalFile *os.File
@@ -15,11 +16,13 @@ var logTerminalFile *os.File
 const (
 	logFilename         = "aquarium.log"
 	logTerminalFilename = "terminal.log"
+	debugFilename       = "debug.log"
 )
 
-func Init(_logch chan string, _termch chan string) {
+func Init(_logch chan string, _termch chan string, _debug bool) {
 	logch = _logch
 	termch = _termch
+	debug = _debug
 
 	// Check if file exists
 	if _, err := os.Stat(logFilename); os.IsNotExist(err) {
@@ -113,9 +116,10 @@ func LogTerminalf(msg string, args ...interface{}) {
 	}
 }
 
-const debugFilename = "debug.log"
-
 func Debugf(msg string, args ...interface{}) {
+	if !debug {
+		return
+	}
 	var debugFile *os.File
 	if _, err := os.Stat(debugFilename); os.IsNotExist(err) {
 		debugFile, err = os.Create(debugFilename)

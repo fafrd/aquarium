@@ -22,19 +22,21 @@ import (
 type Actor struct {
 	cli                *client.Client
 	ctx                context.Context
+	commandState       string
 	containerId        string
-	terminalConnection types.HijackedResponse
+	goal               string
 	Id                 string
 	IterationCount     int
-	commandState       string
+	terminalConnection types.HijackedResponse
 	quit               chan struct{}
 }
 
-func NewActor() *Actor {
+func NewActor(goal string) *Actor {
 	rand.Seed(time.Now().UnixNano())
 	id := fmt.Sprintf("%08x", rand.Uint32())
 
 	return &Actor{
+		goal:           goal,
 		Id:             id,
 		IterationCount: 0,
 		quit:           make(chan struct{}),
@@ -44,7 +46,7 @@ func NewActor() *Actor {
 func (a *Actor) Loop() <-chan struct{} {
 	done := make(chan struct{})
 	logger.Logf("%s Starting actor loop.\n", a.Id)
-	logger.Logf("%s Prompt: %s\n", a.Id, ai.Command)
+	logger.Logf("%s Prompt: %s\n", a.Id, a.goal)
 
 	// instantiate docker container
 	ctx := context.Background()
@@ -175,15 +177,15 @@ func (a *Actor) iteration() {
 	}
 
 	a.IterationCount++
-	logger.Logf("%s iteration %d\n", a.Id, a.IterationCount)
+	logger.Logf("%s iteration %d: asking AI for next command...\n", a.Id, a.IterationCount)
 
 	var nextCommand string
 	var err error
 
 	if a.IterationCount == 1 {
-		nextCommand, err = ai.GenInitialDialogue()
+		nextCommand, err = ai.GenInitialDialogue(a.goal)
 	} else {
-		nextCommand, err = ai.GenNextDialogue(a.commandState)
+		nextCommand, err = ai.GenNextDialogue(a.goal, a.commandState)
 	}
 	// shortcut
 	//nextCommand = "sudo nmap -v amazon.com"

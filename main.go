@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -119,9 +120,23 @@ func max(a, b int) int {
 }
 
 func main() {
+	goal := flag.String("goal", "Your goal is to execute a verbose port scan of amazon.com.",
+		`Goal to give the AI. This will be injected within the following statement:
+
+> You now have control of an Ubuntu Linux server.
+> [YOUR GOAL WILL BE INSERTED HERE]
+> Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
+>
+> Respond with a linux command to give to the server.
+
+`)
+	debug := flag.Bool("debug", false, "Enable logging of AI prompts to debug.log")
+
+	flag.Parse()
+
 	logch := make(chan string, 100)  // general log messages; each one is appended (with newline)
 	termch := make(chan string, 100) // terminal log messages; each one completely replaces the previous
-	logger.Init(logch, termch)
+	logger.Init(logch, termch, *debug)
 
 	p := tea.NewProgram(
 		model{logContent: "", terminalContent: string("Container not started.")},
@@ -142,7 +157,7 @@ func main() {
 	}()
 
 	go func() {
-		actor := actor.NewActor()
+		actor := actor.NewActor(*goal)
 		<-actor.Loop()
 	}()
 

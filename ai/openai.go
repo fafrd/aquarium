@@ -11,40 +11,37 @@ import (
 	"github.com/PullRequestInc/go-gpt3"
 )
 
-var Command = "Your goal is to execute a verbose port scan of amazon.com."
-var basis = fmt.Sprintf("You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.",
-	Command)
-var initialPrompt = fmt.Sprintf(`%s
+var initialPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
 
-Respond with a linux command to give to the server.`, basis)
-var nextPrompt = fmt.Sprintf(`%s
+Respond with a linux command to give to the server.`
+var nextPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
 
 Previous commands and output:
-%%s
+%s
 
-Give the next input to the terminal.`, basis)
+Give the next input to the terminal.`
 var tokens = 100
 
-func GenInitialDialogue() (string, error) {
-	return genDialogue(initialPrompt, "")
+func GenInitialDialogue(goal string) (string, error) {
+	prompt := fmt.Sprintf(initialPrompt, goal)
+	return genDialogue(prompt)
 }
 
-func GenNextDialogue(state string) (string, error) {
-	return genDialogue(nextPrompt, state)
+func GenNextDialogue(goal string, previousOutput string) (string, error) {
+	prompt := fmt.Sprintf(nextPrompt, goal, previousOutput)
+	return genDialogue(prompt)
 }
 
-func genDialogue(prompt string, subject string) (string, error) {
+func genDialogue(aiPrompt string) (string, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return "", errors.New("undefined env var OPENAI_API_KEY")
 	}
 
-	aiPrompt := fmt.Sprintf(prompt, subject)
-
 	ctx := context.Background()
 	client := gpt3.NewClient(apiKey)
 
-	logger.Debugf("Sending request to OpenAI:\n%s\n", aiPrompt)
+	logger.Debugf("### Sending request to OpenAI:\n%s\n", aiPrompt)
 
 	resp, err := client.CompletionWithEngine(ctx, "text-davinci-003", gpt3.CompletionRequest{
 		Prompt:      []string{aiPrompt},
@@ -57,6 +54,8 @@ func genDialogue(prompt string, subject string) (string, error) {
 	}
 
 	trimmedResponse := strings.TrimSpace(resp.Choices[0].Text)
+	logger.Debugf("### Received response from OpenAI:\n%s\n", trimmedResponse)
+
 	sanitizedResponse := strings.Split(trimmedResponse, "\n")[0]
 	return sanitizedResponse, nil
 }
