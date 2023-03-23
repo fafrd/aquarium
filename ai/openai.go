@@ -11,25 +11,54 @@ import (
 	"github.com/PullRequestInc/go-gpt3"
 )
 
-var initialPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
+const initialPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
 
 Respond with a linux command to give to the server.`
-var nextPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
 
-Previous commands and output:
+const nextPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
+
+Previous commands and outcomes:
+%sGive the next input to the terminal.`
+
+const outcomeSingle = `A Linux command was run, and this was its output:
+
 %s
 
-Give the next input to the terminal.`
-var tokens = 100
+The original command was '%s'. What was the outcome?`
+
+const tokens = 100
+
+type CommandPair struct {
+	Command       string
+	OutputSummary string
+}
+
+func (c CommandPair) String() string {
+	return fmt.Sprintf("%s\n%s", c.Command, c.OutputSummary)
+}
 
 func GenInitialDialogue(goal string) (string, error) {
 	prompt := fmt.Sprintf(initialPrompt, goal)
 	return genDialogue(prompt)
 }
 
-func GenNextDialogue(goal string, previousOutput string) (string, error) {
-	prompt := fmt.Sprintf(nextPrompt, goal, previousOutput)
+func GenNextDialogue(goal string, previousCommands []CommandPair) (string, error) {
+	var previousCommandsString string
+	for _, pair := range previousCommands {
+		previousCommandsString += fmt.Sprintf("%s\n\n", pair)
+	}
+
+	prompt := fmt.Sprintf(nextPrompt, goal, previousCommandsString)
 	return genDialogue(prompt)
+}
+
+func SummarizeCommandOutput(previousCommand string, previousOutput string) (string, error) {
+	prompt := fmt.Sprintf(outcomeSingle, previousOutput, previousCommand)
+	return genDialogue(prompt)
+}
+
+func SummarizeCommandOutputMultipart() {
+	// TODO
 }
 
 func genDialogue(aiPrompt string) (string, error) {
@@ -41,7 +70,7 @@ func genDialogue(aiPrompt string) (string, error) {
 	ctx := context.Background()
 	client := gpt3.NewClient(apiKey)
 
-	logger.Debugf("### Sending request to OpenAI:\n%s\n", aiPrompt)
+	logger.Debugf("\n### Sending request to OpenAI:\n%s\n", aiPrompt)
 
 	resp, err := client.CompletionWithEngine(ctx, "text-davinci-003", gpt3.CompletionRequest{
 		Prompt:      []string{aiPrompt},

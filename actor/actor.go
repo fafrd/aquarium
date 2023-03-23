@@ -20,15 +20,18 @@ import (
 )
 
 type Actor struct {
-	cli                *client.Client
-	ctx                context.Context
-	commandState       string
-	containerId        string
-	goal               string
-	Id                 string
-	IterationCount     int
-	terminalConnection types.HijackedResponse
-	quit               chan struct{}
+	cli                    *client.Client
+	ctx                    context.Context
+	lastCommand            string
+	lastCommandOutput      string
+	terminalStateString    string
+	terminalStateSummaries []ai.CommandPair // [command: outputSummary, command: outputSummary, etc]
+	containerId            string
+	goal                   string
+	Id                     string
+	IterationCount         int
+	terminalConnection     types.HijackedResponse
+	quit                   chan struct{}
 }
 
 func NewActor(goal string) *Actor {
@@ -130,7 +133,7 @@ func (a *Actor) Loop() <-chan struct{} {
 				return
 			default:
 				a.iteration()
-				time.Sleep(2 * time.Second) // actor loop interval
+				time.Sleep(2 * time.Second) // actor loop interval. meant to keep output slow and readable. can be removed
 			}
 		}
 	}()
@@ -139,6 +142,8 @@ func (a *Actor) Loop() <-chan struct{} {
 }
 
 func (a *Actor) iteration() {
+	a.IterationCount++
+
 	handleError := func(err error) {
 		logger.Logf("Actor %s fatal error: %s\n", a.Id, err)
 		close(a.quit)
@@ -176,22 +181,34 @@ func (a *Actor) iteration() {
 		return kv, len(kv), nil
 	}
 
-	a.IterationCount++
-	logger.Logf("%s iteration %d: asking AI for next command...\n", a.Id, a.IterationCount)
-
 	var nextCommand string
 	var err error
 
 	if a.IterationCount == 1 {
+		logger.Logf("%s iteration %d: asking AI for next command...\n", a.Id, a.IterationCount)
 		nextCommand, err = ai.GenInitialDialogue(a.goal)
 	} else {
-		nextCommand, err = ai.GenNextDialogue(a.goal, a.commandState)
-	}
-	// shortcut
-	//nextCommand = "sudo nmap -v amazon.com"
-	if err != nil {
-		handleError(err)
-		return
+		logger.Logf("%s iteration %d: asking AI to summarize output of previous command... \n", a.Id, a.IterationCount)
+		// TOOD: handle scenario where lastCommandOutput is larger than OpenAI can process (chunk up & summarize)
+		prevCommandSummary, err := ai.SummarizeCommandOutput(a.lastCommand, a.lastCommandOutput)
+		if err != nil {
+			handleError(err)
+			return
+		}
+
+		// append to a.terminalStateSummaries
+		a.terminalStateSummaries = append(a.terminalStateSummaries, ai.CommandPair{
+			Command:       a.lastCommand,
+			OutputSummary: prevCommandSummary,
+		})
+
+		logger.Logf("%s iteration %d: asking AI for next command...\n", a.Id, a.IterationCount)
+		nextCommand, err = ai.GenNextDialogue(a.goal, a.terminalStateSummaries)
+		if err != nil {
+			handleError(err)
+			return
+		}
+
 	}
 
 	// rewrite apt-get as apt-get -y
@@ -239,16 +256,21 @@ func (a *Actor) iteration() {
 	}
 
 	// read output
-	output, err := a.ReadTerminalOut()
+	newTerminalState, err := a.ReadTerminalOut()
 	if err != nil {
 		handleError(err)
 		return
 	}
 
-	// TODO- only keep the last ~40 lines or so of output?
-	// ideally, send the AI the list of commands run so far and the output from just the last one
+	// calculate new additions between newTerminalState and old terminal state
+	oldTerminalStateLines := strings.Split(a.terminalStateString, "\n")
+	newTerminalStateLines := strings.Split(newTerminalState, "\n")
+	newTerminalStateLines = newTerminalStateLines[len(oldTerminalStateLines):] // take difference
 
-	a.commandState = output
+	// update state
+	a.lastCommandOutput = strings.Join(newTerminalStateLines, "\n")
+	a.lastCommand = nextCommand
+	a.terminalStateString = newTerminalState
 }
 
 func (a *Actor) ReadTerminalOut() (string, error) {
