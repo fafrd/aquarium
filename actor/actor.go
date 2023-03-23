@@ -195,9 +195,17 @@ func (a *Actor) iteration() {
 	}
 
 	// rewrite apt-get as apt-get -y
-	pattern := regexp.MustCompile(`(apt(?:-get)?\s+(?:install|upgrade)\s+)(\S+)`)
-	replacement := "${1}-y $2"
-	nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
+	if !strings.Contains(nextCommand, "-y") {
+		pattern := regexp.MustCompile(`(apt(?:-get)?\s+(?:install|upgrade)\s+)(\S+)`)
+		replacement := "${1}-y $2"
+		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
+	}
+	// rewrite apt-get as apt-get -q
+	if !strings.Contains(nextCommand, "-q") {
+		pattern := regexp.MustCompile(`(apt(?:-get)?\s+(?:install|upgrade)\s+)(\S+)`)
+		replacement := "${1}-q $2"
+		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
+	}
 
 	_, initialProcCount, err := getProcs()
 	if err != nil {
@@ -296,5 +304,19 @@ func (a *Actor) ReadTerminalOut() (string, error) {
 		}
 	}
 
-	return sanitized, nil
+	// deduplicate subsequent lines w the same content
+	lines := strings.Split(sanitized, "\n")
+	var result []string
+
+	previousLine := ""
+	for _, line := range lines {
+		if line != previousLine {
+			result = append(result, line)
+			previousLine = line
+		}
+	}
+
+	deduplicated := strings.Join(result, "\n")
+
+	return deduplicated, nil
 }
