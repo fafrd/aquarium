@@ -11,30 +11,14 @@ import (
 	"github.com/PullRequestInc/go-gpt3"
 )
 
-const initialPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
-
-Respond with a linux command to give to the server.\n\n`
-
-const nextPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
-
-Previous commands and outcomes:
-%sGive the next input to the terminal.\n\n`
-
-const outcomeSingle = `A Linux command was run, and this was its output:
-
-%s
-
-The original command was '%s'. What was the outcome?\n\n`
-
-const fragmentSummary = `This is the partial output of a Linux command. Please summarize what happened in this Linux command.
-
-%s\n\n`
-
-const totalSummary = `A Linux command was run, and it had a very long output. The following segments are the summaries of each part of the output, in order:
-
-%sThe original command was '%s'. What was the outcome?\n\n`
-
-const tokens = 200
+const (
+	initialPrompt   = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.\n\nRespond with a linux command to give to the server.\n\n`
+	nextPrompt      = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.\n\nPrevious commands and outcomes:\n%sGive the next input to the terminal.\n\n`
+	outcomeSingle   = `A Linux command was run, and this was its output:\n\n%s\n\nThe original command was '%s'. What was the outcome?\n\n`
+	fragmentSummary = `This is the partial output of a Linux command. Please summarize what happened in this Linux command.\n\n%s\n\n`
+	totalSummary    = `A Linux command was run, and it had a very long output. The following segments are the summaries of each part of the output, in order:\n\n%sThe original command was '%s'. What was the outcome?\n\n`
+	tokens          = 200
+)
 
 type CommandPair struct {
 	Command string
