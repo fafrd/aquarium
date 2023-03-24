@@ -133,7 +133,7 @@ func main() {
 	debug := flag.Bool("debug", false, "Enable logging of AI prompts to debug.log")
 	preserveContainer := flag.Bool("preserve-container", false, "Persist docker container after program exits.")
 	iterationLimit := flag.Int("limit", 30, "Maximum number of commands the AI should run.")
-	recursionDepthLimit := flag.Int("split-limit", 4, "When parsing long responses, we split up the response into chunks and ask the AI to summarize each chunk.\nsplit-limit is the maximum number of times we will split the response.")
+	recursionDepthLimit := flag.Int("split-limit", 3, "When parsing long responses, we split up the response into chunks and ask the AI to summarize each chunk.\nsplit-limit is the maximum number of times we will split the response.")
 
 	flag.Parse()
 
