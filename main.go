@@ -131,6 +131,7 @@ func main() {
 
 `)
 	debug := flag.Bool("debug", false, "Enable logging of AI prompts to debug.log")
+	preserveContainer := flag.Bool("preserve-container", false, "Persist docker container after program exits.")
 	iterationLimit := flag.Int("limit", 30, "Maximum number of commands the AI should run.")
 	recursionDepthLimit := flag.Int("split-limit", 4, "When parsing long responses, we split up the response into chunks and ask the AI to summarize each chunk.\nsplit-limit is the maximum number of times we will split the response.")
 
@@ -161,6 +162,13 @@ func main() {
 	go func() {
 		actor := actor.NewActor(*goal, *iterationLimit, *recursionDepthLimit)
 		<-actor.Loop()
+		if !*preserveContainer {
+			err := actor.CleanupContainer()
+			if err != nil {
+				logger.Logf("Error cleaning up container: %s", err)
+			}
+		}
+		logger.Logf("Done.\n")
 	}()
 
 	if _, err := p.Run(); err != nil {

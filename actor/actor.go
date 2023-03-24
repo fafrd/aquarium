@@ -121,7 +121,9 @@ func (a *Actor) Loop() <-chan struct{} {
 
 			output, err := a.ReadTerminalOut()
 			if err != nil {
-				logger.Logf("Docker terminal logging error: %s\n", err)
+				if !strings.Contains(err.Error(), "is not running") {
+					logger.Logf("Docker terminal logging error: %s\n", err)
+				}
 				return
 			}
 
@@ -367,4 +369,16 @@ func (a *Actor) ReadTerminalOut() (string, error) {
 	deduplicated := strings.Join(result, "\n")
 
 	return deduplicated, nil
+}
+
+func (a *Actor) CleanupContainer() error {
+	logger.Logf("%s: cleaning up container %s\n", a.id, a.containerId)
+	time.Sleep(250 * time.Millisecond)
+	err := a.cli.ContainerRemove(a.ctx, a.containerId, types.ContainerRemoveOptions{
+		Force: true,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
 }
