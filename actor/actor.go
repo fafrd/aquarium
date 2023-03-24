@@ -139,7 +139,7 @@ func (a *Actor) Loop() <-chan struct{} {
 				return
 			default:
 				a.iteration()
-				time.Sleep(2 * time.Second) // actor loop interval. meant to keep output slow and readable. can be removed
+				time.Sleep(1000 * time.Millisecond) // actor loop interval. meant to keep output slow and readable. can be removed
 			}
 		}
 	}()
