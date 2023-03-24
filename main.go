@@ -131,6 +131,7 @@ func main() {
 
 `)
 	debug := flag.Bool("debug", false, "Enable logging of AI prompts to debug.log")
+	recursionDepthLimit := flag.Int("split-limit", 4, "When parsing long responses, we split up the response into chunks and ask the AI to summarize each chunk.\nsplit-limit is the maximum number of times we will split the response.")
 
 	flag.Parse()
 
@@ -157,7 +158,7 @@ func main() {
 	}()
 
 	go func() {
-		actor := actor.NewActor(*goal)
+		actor := actor.NewActor(*goal, *recursionDepthLimit)
 		<-actor.Loop()
 	}()
 

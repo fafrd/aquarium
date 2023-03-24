@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 
@@ -56,7 +57,7 @@ func GenNextDialogue(goal string, previousCommands []CommandPair) (string, error
 	return firstLine, nil
 }
 
-func GenCommandOutcome(previousCommand string, previousOutput string) (string, error) {
+func GenCommandOutcome(previousCommand string, previousOutput string, recursionDepthLimit int) (string, error) {
 	if previousOutput == "" {
 		return "There was no output from this command.", nil
 	}
@@ -68,7 +69,7 @@ func GenCommandOutcome(previousCommand string, previousOutput string) (string, e
 		if strings.Contains(fmt.Sprintf("%s", err), "Please reduce your prompt") {
 			logger.Logf("Last command output was too large to process in one request. Splitting output into chunks and summarizing chunks individually...\n")
 			// recursively chunk up the output and get chunk summaries
-			summaries, err := summarizeCommandOutputMultipart(previousOutput)
+			summaries, err := summarizeCommandOutputMultipart(previousOutput, 1, recursionDepthLimit)
 			if err != nil {
 				return "", err
 			}
@@ -86,7 +87,7 @@ func GenCommandOutcome(previousCommand string, previousOutput string) (string, e
 	return response, nil
 }
 
-func summarizeCommandOutputMultipart(output string) ([]CommandPair, error) {
+func summarizeCommandOutputMultipart(output string, recursionDepth int, recursionDepthLimit int) ([]CommandPair, error) {
 	// by entering this function, we assume that the last portion was too large to process in one request
 	summaries := make([]CommandPair, 0)
 
@@ -107,7 +108,12 @@ func summarizeCommandOutputMultipart(output string) ([]CommandPair, error) {
 		} else {
 			if strings.Contains(fmt.Sprintf("%s", err), "Please reduce your prompt") {
 				logger.Logf("Last command output was STILL too large to process in one request. Splitting again...\n")
-				halfPair, err := summarizeCommandOutputMultipart(half)
+				if recursionDepth+1 > recursionDepthLimit {
+					// There's a more graceful way to handle this than imposing recursionDepthLimit
+					// we could return the summaries so far, or could summarize just the last chunk somehow
+					return nil, fmt.Errorf("recursion depth limit exceeded. Output from last command was too large. (limit is %d, which implies a max of %d requests to OpenAI)", recursionDepthLimit, int(math.Pow(2, float64(recursionDepthLimit))))
+				}
+				halfPair, err := summarizeCommandOutputMultipart(half, recursionDepth+1, recursionDepthLimit)
 				if err != nil {
 					return nil, err
 				}
@@ -122,7 +128,7 @@ func summarizeCommandOutputMultipart(output string) ([]CommandPair, error) {
 }
 
 func summarizeCommandOutputSingle(output string) (string, error) {
-	logger.Logf("Summarizing output chunk...\n")
+	logger.Logf("Summarizing output chunk\n")
 	prompt := fmt.Sprintf(fragmentSummary, output)
 	return genDialogue(prompt)
 }

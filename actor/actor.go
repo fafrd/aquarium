@@ -22,6 +22,7 @@ import (
 type Actor struct {
 	cli                   *client.Client
 	ctx                   context.Context
+	recursionDepthLimit   int
 	lastCommand           string
 	lastCommandOutput     string
 	terminalStateString   string
@@ -34,15 +35,16 @@ type Actor struct {
 	quit                  chan struct{}
 }
 
-func NewActor(goal string) *Actor {
+func NewActor(goal string, recursionDepthLimit int) *Actor {
 	rand.Seed(time.Now().UnixNano())
 	id := fmt.Sprintf("%08x", rand.Uint32())
 
 	return &Actor{
-		goal:           goal,
-		Id:             id,
-		IterationCount: 0,
-		quit:           make(chan struct{}),
+		goal:                goal,
+		recursionDepthLimit: recursionDepthLimit,
+		Id:                  id,
+		IterationCount:      0,
+		quit:                make(chan struct{}),
 	}
 }
 
@@ -194,7 +196,7 @@ func (a *Actor) iteration() {
 	} else {
 		logger.Logf("%s iteration %d: asking AI to summarize output of previous command... \n", a.Id, a.IterationCount)
 
-		prevCommandOutcome, err := ai.GenCommandOutcome(a.lastCommand, a.lastCommandOutput)
+		prevCommandOutcome, err := ai.GenCommandOutcome(a.lastCommand, a.lastCommandOutput, a.recursionDepthLimit)
 		if err != nil {
 			handleError(err)
 			return
