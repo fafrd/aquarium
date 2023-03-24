@@ -227,6 +227,12 @@ func (a *Actor) iteration() {
 		replacement := "${1}-q $2"
 		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
 	}
+	// rewrite wget as wget -nv
+	if !strings.Contains(nextCommand, "-nv") {
+		pattern := regexp.MustCompile(`(wget\s+)(\S+)`)
+		replacement := "${1}-nv $2"
+		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
+	}
 
 	_, initialProcCount, err := getProcs()
 	if err != nil {
@@ -240,10 +246,10 @@ func (a *Actor) iteration() {
 
 	// wait for command to finish- poll getProcs until it returns the initial # of processes
 	// TODO checking num procs is a brittle approach
-	time.Sleep(250 * time.Millisecond)
 	waitMessageSent := false
 	for {
 		_, procCount, err := getProcs()
+		time.Sleep(250 * time.Millisecond)
 		//logger.Logf("%s iteration %d: %d processes (initial proc count %d)\n", a.Id, a.IterationCount, procCount, initialProcCount)
 		if err != nil {
 			handleError(err)
