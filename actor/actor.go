@@ -29,29 +29,31 @@ type Actor struct {
 	terminalStateOutcomes []ai.CommandPair // [command: outcome, command: outcome, etc]
 	containerId           string
 	goal                  string
-	Id                    string
-	IterationCount        int
+	id                    string
+	iterationCount        int
+	iterationLimit        int
 	terminalConnection    types.HijackedResponse
 	quit                  chan struct{}
 }
 
-func NewActor(goal string, recursionDepthLimit int) *Actor {
+func NewActor(goal string, iterationLimit int, recursionDepthLimit int) *Actor {
 	rand.Seed(time.Now().UnixNano())
 	id := fmt.Sprintf("%08x", rand.Uint32())
 
 	return &Actor{
 		goal:                goal,
 		recursionDepthLimit: recursionDepthLimit,
-		Id:                  id,
-		IterationCount:      0,
+		iterationLimit:      iterationLimit,
+		id:                  id,
+		iterationCount:      0,
 		quit:                make(chan struct{}),
 	}
 }
 
 func (a *Actor) Loop() <-chan struct{} {
 	done := make(chan struct{})
-	logger.Logf("%s Starting actor loop.\n", a.Id)
-	logger.Logf("%s Prompt: %s\n", a.Id, a.goal)
+	logger.Logf("%s Starting actor loop.\n", a.id)
+	logger.Logf("%s Prompt: %s\n", a.id, a.goal)
 
 	// instantiate docker container
 	ctx := context.Background()
@@ -82,7 +84,7 @@ func (a *Actor) Loop() <-chan struct{} {
 		panic(err)
 	}
 
-	logger.Logf("%s Container started with id %s\n", a.Id, a.containerId)
+	logger.Logf("%s Container started with id %s\n", a.id, a.containerId)
 
 	// create actor connection to terminal
 	terminalExecConfig, err := cli.ContainerExecCreate(ctx, a.containerId, types.ExecConfig{
@@ -110,7 +112,7 @@ func (a *Actor) Loop() <-chan struct{} {
 	a.cli = cli
 	a.ctx = ctx
 
-	logger.Logf("%s Container terminal attached: %s\n", a.Id, a.containerId)
+	logger.Logf("%s Container terminal attached: %s\n", a.id, a.containerId)
 
 	// Log all output from actor's terminal to logger.LogTerminalf()
 	go func() {
@@ -144,10 +146,15 @@ func (a *Actor) Loop() <-chan struct{} {
 }
 
 func (a *Actor) iteration() {
-	a.IterationCount++
+	a.iterationCount++
+	if (a.iterationLimit > 0) && (a.iterationCount > a.iterationLimit) {
+		logger.Logf("Actor %s iteration limit reached. Quitting.\n", a.id)
+		close(a.quit)
+		return
+	}
 
 	handleError := func(err error) {
-		logger.Logf("Actor %s fatal error: %s\n", a.Id, err)
+		logger.Logf("Actor %s fatal error: %s\n", a.id, err)
 		close(a.quit)
 	}
 
@@ -186,15 +193,15 @@ func (a *Actor) iteration() {
 	var nextCommand string
 	var err error
 
-	if a.IterationCount == 1 {
-		logger.Logf("%s iteration %d: asking AI for next command...\n", a.Id, a.IterationCount)
+	if a.iterationCount == 1 {
+		logger.Logf("%s iteration %d: asking AI for next command...\n", a.id, a.iterationCount)
 		nextCommand, err = ai.GenInitialDialogue(a.goal)
 		if err != nil {
 			handleError(err)
 			return
 		}
 	} else {
-		logger.Logf("%s iteration %d: asking AI to summarize output of previous command... \n", a.Id, a.IterationCount)
+		logger.Logf("%s iteration %d: asking AI to summarize output of previous command... \n", a.id, a.iterationCount)
 
 		prevCommandOutcome, err := ai.GenCommandOutcome(a.lastCommand, a.lastCommandOutput, a.recursionDepthLimit)
 		if err != nil {
@@ -208,7 +215,7 @@ func (a *Actor) iteration() {
 			Result:  prevCommandOutcome,
 		})
 
-		logger.Logf("%s iteration %d: asking AI for next command...\n", a.Id, a.IterationCount)
+		logger.Logf("%s iteration %d: asking AI for next command...\n", a.id, a.iterationCount)
 		nextCommand, err = ai.GenNextDialogue(a.goal, a.terminalStateOutcomes)
 		if err != nil {
 			handleError(err)
@@ -250,7 +257,7 @@ func (a *Actor) iteration() {
 	}
 
 	// Execute command in container
-	logger.Logf("%s iteration %d: executing %s\n", a.Id, a.IterationCount, nextCommand)
+	logger.Logf("%s iteration %d: executing %s\n", a.id, a.iterationCount, nextCommand)
 	a.terminalConnection.Conn.Write([]byte(nextCommand + "\n"))
 
 	// wait for command to finish- poll getProcs until it returns the initial # of processes
@@ -259,7 +266,7 @@ func (a *Actor) iteration() {
 	for {
 		_, procCount, err := getProcs()
 		time.Sleep(250 * time.Millisecond)
-		//logger.Logf("%s iteration %d: %d processes (initial proc count %d)\n", a.Id, a.IterationCount, procCount, initialProcCount)
+		//logger.Logf("%s iteration %d: %d processes (initial proc count %d)\n", a.id, a.iterationCount, procCount, initialProcCount)
 		if err != nil {
 			handleError(err)
 			return
@@ -268,7 +275,7 @@ func (a *Actor) iteration() {
 			break
 		}
 		if !waitMessageSent {
-			logger.Logf("%s iteration %d: waiting for command to finish...\n", a.Id, a.IterationCount)
+			logger.Logf("%s iteration %d: waiting for command to finish...\n", a.id, a.iterationCount)
 			waitMessageSent = true
 		}
 		time.Sleep(1 * time.Second)
