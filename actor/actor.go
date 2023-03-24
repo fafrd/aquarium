@@ -228,7 +228,7 @@ func (a *Actor) iteration() {
 		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
 	}
 	// rewrite wget as wget -nv
-	if !strings.Contains(nextCommand, "-nv") {
+	if !strings.Contains(nextCommand, "-nv") && !strings.Contains(nextCommand, "apt") {
 		pattern := regexp.MustCompile(`(wget\s+)(\S+)`)
 		replacement := "${1}-nv $2"
 		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
@@ -255,7 +255,7 @@ func (a *Actor) iteration() {
 			handleError(err)
 			return
 		}
-		if procCount == initialProcCount {
+		if procCount <= initialProcCount {
 			break
 		}
 		if !waitMessageSent {

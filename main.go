@@ -134,8 +134,8 @@ func main() {
 
 	flag.Parse()
 
-	logch := make(chan string, 100)  // general log messages; each one is appended (with newline)
-	termch := make(chan string, 100) // terminal log messages; each one completely replaces the previous
+	logch := make(chan string, 10000)  // general log messages; each one is appended (with newline)
+	termch := make(chan string, 10000) // terminal log messages; each one completely replaces the previous
 	logger.Init(logch, termch, *debug)
 
 	p := tea.NewProgram(
