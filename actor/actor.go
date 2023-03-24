@@ -291,9 +291,12 @@ func (a *Actor) iteration() {
 	}
 
 	// calculate new additions between newTerminalState and old terminal state
-	oldTerminalStateLines := strings.Split(a.terminalStateString, "\n")
+	oldTerminalStateLineCount := len(strings.Split(a.terminalStateString, "\n"))
+	if oldTerminalStateLineCount <= 1 {
+		oldTerminalStateLineCount = 5
+	}
 	newTerminalStateLines := strings.Split(newTerminalState, "\n")
-	newTerminalStateLines = newTerminalStateLines[len(oldTerminalStateLines):] // take difference
+	newTerminalStateLines = newTerminalStateLines[oldTerminalStateLineCount-1 : len(newTerminalStateLines)-2] // take difference
 
 	// update state
 	a.lastCommandOutput = strings.Join(newTerminalStateLines, "\n")
@@ -343,8 +346,6 @@ func (a *Actor) ReadTerminalOut() (string, error) {
 	raw := capturedTerminalOut
 	var sanitized string
 	raw = strings.ReplaceAll(raw, "\r", "\n")
-	raw = strings.ReplaceAll(raw, "\n\n\n", "\n")
-	raw = strings.ReplaceAll(raw, "\n\n", "\n")
 	//raw = strings.ReplaceAll(raw, "%", "%%")
 
 	// remove any remaining lines that are pure whitespace
@@ -367,7 +368,6 @@ func (a *Actor) ReadTerminalOut() (string, error) {
 	}
 
 	deduplicated := strings.Join(result, "\n")
-
 	return deduplicated, nil
 }
 
