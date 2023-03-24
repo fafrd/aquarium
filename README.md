@@ -22,10 +22,13 @@ https://user-images.githubusercontent.com/5905628/227047932-1a87e7e7-43f9-48e0-a
 
 ## start
 
-    OPENAI_API_KEY=$OPENAI_API_KEY ./aquarium --goal "Your goal is to execute a verbose port scan of amazon.com."
+Pass your prompt in the form of a goal. For example, `--goal "Your goal is to run a minecraft server."`
+
+    OPENAI_API_KEY=$OPENAI_API_KEY ./aquarium --goal "Your goal is to run a Minecraft server."
 
 ## logs
 
 The left side of the screen contains general information about the state of the program. The right side contains the terminal, as seen by the AI.
+<br />These are written to aquarium.log and terminal.log.
 
-These are written to aquarium.log and terminal.log.
+Calls to OpenAI are not logged unless you add the `--debug` flag. API requests and responses will be appended to debug.log.

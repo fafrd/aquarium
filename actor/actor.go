@@ -20,18 +20,18 @@ import (
 )
 
 type Actor struct {
-	cli                    *client.Client
-	ctx                    context.Context
-	lastCommand            string
-	lastCommandOutput      string
-	terminalStateString    string
-	terminalStateSummaries []ai.CommandPair // [command: outputSummary, command: outputSummary, etc]
-	containerId            string
-	goal                   string
-	Id                     string
-	IterationCount         int
-	terminalConnection     types.HijackedResponse
-	quit                   chan struct{}
+	cli                   *client.Client
+	ctx                   context.Context
+	lastCommand           string
+	lastCommandOutput     string
+	terminalStateString   string
+	terminalStateOutcomes []ai.CommandPair // [command: outcome, command: outcome, etc]
+	containerId           string
+	goal                  string
+	Id                    string
+	IterationCount        int
+	terminalConnection    types.HijackedResponse
+	quit                  chan struct{}
 }
 
 func NewActor(goal string) *Actor {
@@ -187,23 +187,27 @@ func (a *Actor) iteration() {
 	if a.IterationCount == 1 {
 		logger.Logf("%s iteration %d: asking AI for next command...\n", a.Id, a.IterationCount)
 		nextCommand, err = ai.GenInitialDialogue(a.goal)
+		if err != nil {
+			handleError(err)
+			return
+		}
 	} else {
 		logger.Logf("%s iteration %d: asking AI to summarize output of previous command... \n", a.Id, a.IterationCount)
-		// TOOD: handle scenario where lastCommandOutput is larger than OpenAI can process (chunk up & summarize)
-		prevCommandSummary, err := ai.SummarizeCommandOutput(a.lastCommand, a.lastCommandOutput)
+
+		prevCommandOutcome, err := ai.GenCommandOutcome(a.lastCommand, a.lastCommandOutput)
 		if err != nil {
 			handleError(err)
 			return
 		}
 
 		// append to a.terminalStateSummaries
-		a.terminalStateSummaries = append(a.terminalStateSummaries, ai.CommandPair{
-			Command:       a.lastCommand,
-			OutputSummary: prevCommandSummary,
+		a.terminalStateOutcomes = append(a.terminalStateOutcomes, ai.CommandPair{
+			Command: a.lastCommand,
+			Result:  prevCommandOutcome,
 		})
 
 		logger.Logf("%s iteration %d: asking AI for next command...\n", a.Id, a.IterationCount)
-		nextCommand, err = ai.GenNextDialogue(a.goal, a.terminalStateSummaries)
+		nextCommand, err = ai.GenNextDialogue(a.goal, a.terminalStateOutcomes)
 		if err != nil {
 			handleError(err)
 			return
