@@ -8,7 +8,7 @@ In the example below, we start with the prompt:
 > 
 > Respond with a linux command to give to the server.
 
-The AI first has does a _sudo apt-get update_, then installs openjdk-8-jre-headless. Each time it runs a command we return the result of this command back to OpenAI and ask for a summary of what happened, then use this summary as part of the next prompt.
+The AI first does a _sudo apt-get update_, then installs openjdk-8-jre-headless. Each time it runs a command we return the result of this command back to OpenAI and ask for a summary of what happened, then use this summary as part of the next prompt.
 
 [![asciicast](https://asciinema.org/a/0CH4ESDjt4H11WABiMlGZNMYU.png?)](https://asciinema.org/a/0CH4ESDjt4H11WABiMlGZNMYU?&speed=2&i=2&autoplay=1)
 
