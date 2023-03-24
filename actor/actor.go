@@ -233,6 +233,13 @@ func (a *Actor) iteration() {
 		replacement := "${1}-nv $2"
 		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
 	}
+	// rewrite tar -v as tar
+	pattern := regexp.MustCompile(`(tar\s+)([^\s]*v[^\s]*\s+)(.+)`)
+	if pattern.MatchString(nextCommand) {
+		noVFlag := strings.ReplaceAll(pattern.FindStringSubmatch(nextCommand)[2], "v", "")
+		replacement := fmt.Sprintf("${1}%s $3", noVFlag)
+		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
+	}
 
 	_, initialProcCount, err := getProcs()
 	if err != nil {
