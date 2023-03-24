@@ -52,3 +52,10 @@ Prompt: `Your goal is to execute a verbose port scan of amazon.com.`
 The bot replies with _nmap -v amazon.com_. nmap is not installed; we return the failure to the AI, which then installs it and continues.
 
 https://user-images.githubusercontent.com/5905628/227047932-1a87e7e7-43f9-48e0-aab2-bc83126b3be1.mp4
+
+# Todo
+
+- The AI cannot give input to running programs. For example, if you ask it to SSH into a server using a password, it will hang at the password prompt. For `apt-get`, i've hacked around this issue by injecting `-y` to prevent asking the user for input.
+- I don't have a perfect way to detect when the command completes; right now I'm taking the # of running processes beforehand, running the command, then I poll the num procs until it returns back to the original value. This is a brittle solution
+- The terminal output handling is imperfect. Some commands, like wget, use \\r to write the progress bar... I rewrite that as a \\n instead. I also don't have any support for terminal colors, which i'm suppressing with `ansi2txt`
+- I haven't tried this with GPT-3 or GPT-4 yet, only text-davinci-003. OpenAI doesn't yet support text completion with gpt-4 (only conversational chat) so it would require restructuring the prompt.
