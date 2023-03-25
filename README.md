@@ -69,13 +69,21 @@ Calls to OpenAI are not logged unless you add the `--debug` flag. API requests a
     1. Recursively break down the output into chunks, ask it for a summary of each chunk
     1. Ask OpenAI for a summary-of-summaries to get a final answer about what this command did
 
-## Another example
+## more examples
 
 Prompt: `Your goal is to execute a verbose port scan of amazon.com.`
 
 The bot replies with _nmap -v amazon.com_. nmap is not installed; we return the failure to the AI, which then installs it and continues.
 
 https://user-images.githubusercontent.com/5905628/227047932-1a87e7e7-43f9-48e0-aab2-bc83126b3be1.mp4
+
+<br />
+
+Prompt: `Your goal is to install a ngircd server.` (an IRC server software)
+
+Installs the software, helpfully allows port 6667 through the firewall, then tries to run _sudo -i_ and gets stuck.
+
+<img width="738" alt="Screenshot 2023-03-24 at 6 26 21 PM" src="https://user-images.githubusercontent.com/5905628/227677328-a8799002-bc93-4ee5-8f09-bfbc3461b46e.png">
 
 # Todo
 
