@@ -28,6 +28,30 @@ Pass your prompt in the form of a goal. For example, `--goal "Your goal is to ru
 
     OPENAI_API_KEY=$OPENAI_API_KEY ./aquarium --goal "Your goal is to run a Minecraft server."
 
+**arguments**
+
+    ./aquarium -h
+    Usage of ./aquarium:
+      -debug
+        Enable logging of AI prompts to debug.log
+      -goal string
+            Goal to give the AI. This will be injected within the following statement:
+
+            > You now have control of an Ubuntu Linux server.
+            > [YOUR GOAL WILL BE INSERTED HERE]
+            > Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
+            >
+            > Respond with a linux command to give to the server.
+
+             (default "Your goal is to execute a verbose port scan of amazon.com.")
+      -limit int
+            Maximum number of commands the AI should run. (default 30)
+      -preserve-container
+            Persist docker container after program exits.
+      -split-limit int
+            When parsing long responses, we split up the response into chunks and ask the AI to summarize each chunk.
+            split-limit is the maximum number of times we will split the response. (default 3)
+
 ## Logs
 
 The left side of the screen contains general information about the state of the program. The right side contains the terminal, as seen by the AI.
@@ -55,6 +79,7 @@ https://user-images.githubusercontent.com/5905628/227047932-1a87e7e7-43f9-48e0-a
 
 # Todo
 
+- There's no success criteria- the program doesn't know when to stop. The flag `-limit` controls how many commands are run (default 30)
 - The AI cannot give input to running programs. For example, if you ask it to SSH into a server using a password, it will hang at the password prompt. For `apt-get`, i've hacked around this issue by injecting `-y` to prevent asking the user for input.
 - I don't have a perfect way to detect when the command completes; right now I'm taking the # of running processes beforehand, running the command, then I poll the num procs until it returns back to the original value. This is a brittle solution
 - The terminal output handling is imperfect. Some commands, like wget, use \\r to write the progress bar... I rewrite that as a \\n instead. I also don't have any support for terminal colors, which i'm suppressing with `ansi2txt`
