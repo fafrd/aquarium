@@ -137,6 +137,7 @@ func main() {
 - partial: We send the last 10 lines of the terminal output to the AI. (cheap, accurate)
 - full: We send the entire terminal output to the AI. (expensive, very accurate)
 `)
+	aiModel := flag.String("model", "gpt-3.5-turbo", "OpenAI model to use. gpt-4 is best, but most expensive. See https://platform.openai.com/docs/models")
 	recursionDepthLimit := flag.Int("split-limit", 3, "When context-mode=full, we split up the response into chunks and ask the AI to summarize each chunk.\nsplit-limit is the maximum number of times we will split the response.")
 
 	flag.Parse()
@@ -168,7 +169,7 @@ func main() {
 	}()
 
 	go func() {
-		actor := actor.NewActor(*goal, *contextMode, *iterationLimit, *recursionDepthLimit)
+		actor := actor.NewActor(*aiModel, *goal, *contextMode, *iterationLimit, *recursionDepthLimit)
 		<-actor.Loop()
 		if !*preserveContainer {
 			err := actor.CleanupContainer()

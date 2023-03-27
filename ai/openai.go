@@ -61,9 +61,9 @@ func (c CommandPair) String() string {
 	return fmt.Sprintf("%s\n%s", c.Command, c.Result)
 }
 
-func GenInitialDialogue(goal string) (string, error) {
+func GenInitialDialogue(model string, goal string) (string, error) {
 	prompt := fmt.Sprintf(initialPrompt, goal)
-	result, err := genDialogue(prompt)
+	result, err := genDialogue(model, prompt)
 	if err != nil {
 		return "", err
 	}
@@ -72,14 +72,14 @@ func GenInitialDialogue(goal string) (string, error) {
 	return firstLine, nil
 }
 
-func GenNextDialogue(goal string, previousCommands []CommandPair) (string, error) {
+func GenNextDialogue(model string, goal string, previousCommands []CommandPair) (string, error) {
 	var previousCommandsString string
 	for _, pair := range previousCommands {
 		previousCommandsString += fmt.Sprintf("%s\n\n", pair)
 	}
 
 	prompt := fmt.Sprintf(nextPrompt, goal, previousCommandsString)
-	result, err := genDialogue(prompt)
+	result, err := genDialogue(model, prompt)
 	if err != nil {
 		return "", err
 	}
@@ -88,31 +88,31 @@ func GenNextDialogue(goal string, previousCommands []CommandPair) (string, error
 	return firstLine, nil
 }
 
-func GenCommandOutcomeTruncated(previousCommand string, previousOutput string) (string, error) {
+func GenCommandOutcomeTruncated(model string, previousCommand string, previousOutput string) (string, error) {
 	prompt := fmt.Sprintf(outcomeTruncated, previousOutput, previousCommand)
-	return genDialogue(prompt)
+	return genDialogue(model, prompt)
 }
 
-func GenCommandOutcome(previousCommand string, previousOutput string, recursionDepthLimit int) (string, error) {
+func GenCommandOutcome(model string, previousCommand string, previousOutput string, recursionDepthLimit int) (string, error) {
 	if previousOutput == "" {
 		return "There was no output from this command.", nil
 	}
 
 	prompt := fmt.Sprintf(outcomeSingle, previousOutput, previousCommand)
-	response, err := genDialogue(prompt)
+	response, err := genDialogue(model, prompt)
 
 	if err != nil {
 		if strings.Contains(fmt.Sprintf("%s", err), "Please reduce the length of the messages") {
 			logger.Logf("Last command output was too large to process in one request. Splitting output into chunks and summarizing chunks individually.\n")
 
 			// recursively chunk up the output and get chunk summaries
-			summaries, err := summarizeCommandOutputMultipart(previousOutput, 1, recursionDepthLimit)
+			summaries, err := summarizeCommandOutputMultipart(model, previousOutput, 1, recursionDepthLimit)
 			if err != nil {
 				return "", err
 			}
 
 			// then ask for the outcome of those summaries
-			response, err = determineOutcomeOfSummaryChunks(previousCommand, summaries)
+			response, err = determineOutcomeOfSummaryChunks(model, previousCommand, summaries)
 			if err != nil {
 				return "", err
 			}
@@ -124,7 +124,7 @@ func GenCommandOutcome(previousCommand string, previousOutput string, recursionD
 	return response, nil
 }
 
-func summarizeCommandOutputMultipart(output string, recursionDepth int, recursionDepthLimit int) ([]CommandPair, error) {
+func summarizeCommandOutputMultipart(model string, output string, recursionDepth int, recursionDepthLimit int) ([]CommandPair, error) {
 	summaries := make([]CommandPair, 0)
 
 	outputLines := strings.Split(output, "\n")
@@ -138,8 +138,8 @@ func summarizeCommandOutputMultipart(output string, recursionDepth int, recursio
 
 	wg.Add(2)
 
-	go summarizeCommandOutputSingle(firstHalf, recursionDepth, recursionDepthLimit, resultChan, errChan, &wg)
-	go summarizeCommandOutputSingle(secondHalf, recursionDepth, recursionDepthLimit, resultChan, errChan, &wg)
+	go summarizeCommandOutputSingle(model, firstHalf, recursionDepth, recursionDepthLimit, resultChan, errChan, &wg)
+	go summarizeCommandOutputSingle(model, secondHalf, recursionDepth, recursionDepthLimit, resultChan, errChan, &wg)
 
 	go func() {
 		wg.Wait()
@@ -171,12 +171,12 @@ func summarizeCommandOutputMultipart(output string, recursionDepth int, recursio
 	return summaries, nil
 }
 
-func summarizeCommandOutputSingle(half string, recursionDepth int, recursionDepthLimit int, resultChan chan<- []CommandPair, errChan chan<- error, wg *sync.WaitGroup) {
+func summarizeCommandOutputSingle(model string, half string, recursionDepth int, recursionDepthLimit int, resultChan chan<- []CommandPair, errChan chan<- error, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	logger.Logf("Summarizing chunk...\n")
 	prompt := fmt.Sprintf(fragmentSummary, half)
-	halfSummary, err := genDialogue(prompt)
+	halfSummary, err := genDialogue(model, prompt)
 	if err == nil {
 		resultChan <- []CommandPair{{
 			Command: half,
@@ -189,7 +189,7 @@ func summarizeCommandOutputSingle(half string, recursionDepth int, recursionDept
 				errChan <- fmt.Errorf("recursion depth limit exceeded. Output from last command was too large. (limit is %d, which implies a max of %d requests to OpenAI)", recursionDepthLimit, int(math.Pow(2, float64(recursionDepthLimit))))
 				return
 			}
-			halfPair, err := summarizeCommandOutputMultipart(half, recursionDepth+1, recursionDepthLimit)
+			halfPair, err := summarizeCommandOutputMultipart(model, half, recursionDepth+1, recursionDepthLimit)
 			if err != nil {
 				errChan <- err
 			} else {
@@ -201,17 +201,17 @@ func summarizeCommandOutputSingle(half string, recursionDepth int, recursionDept
 	}
 }
 
-func determineOutcomeOfSummaryChunks(command string, summaries []CommandPair) (string, error) {
+func determineOutcomeOfSummaryChunks(model string, command string, summaries []CommandPair) (string, error) {
 	var previousSummariesString string
 	for i, pair := range summaries {
 		previousSummariesString += fmt.Sprintf("Part %d:\n%s\n\n", i+1, pair.Result)
 	}
 
 	prompt := fmt.Sprintf(totalSummary, previousSummariesString, command)
-	return genDialogue(prompt)
+	return genDialogue(model, prompt)
 }
 
-func genDialogue(aiPrompt string) (string, error) {
+func genDialogue(model string, aiPrompt string) (string, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return "", errors.New("undefined env var OPENAI_API_KEY")
@@ -229,7 +229,7 @@ func genDialogue(aiPrompt string) (string, error) {
 		},
 	}
 	request := gpt3.ChatCompletionRequest{
-		Model:       "gpt-3.5-turbo",
+		Model:       model,
 		Messages:    messages,
 		MaxTokens:   tokens,
 		Temperature: gpt3.Float32Ptr(0.0),

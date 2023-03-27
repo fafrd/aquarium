@@ -33,10 +33,10 @@ Pass your prompt in the form of a goal. For example, `--goal "Your goal is to ru
     ./aquarium -h
     Usage of ./aquarium:
       -context-mode string
-            How much context from the previous command do we give the AI? This is used by the AI to determine what to run next.
-            - partial: We send the last 10 lines of the terminal output to the AI. (cheap, accurate)
-            - full: We send the entire terminal output to the AI. (expensive, very accurate)
-             (default "partial")
+        How much context from the previous command do we give the AI? This is used by the AI to determine what to run next.
+        - partial: We send the last 10 lines of the terminal output to the AI. (cheap, accurate)
+        - full: We send the entire terminal output to the AI. (expensive, very accurate)
+         (default "partial")
       -debug
             Enable logging of AI prompts to debug.log
       -goal string
@@ -50,6 +50,8 @@ Pass your prompt in the form of a goal. For example, `--goal "Your goal is to ru
              (default "Your goal is to run a Minecraft server.")
       -limit int
             Maximum number of commands the AI should run. (default 30)
+      -model string
+            OpenAI model to use. gpt-4 is best, but most expensive. See https://platform.openai.com/docs/models (default "gpt-3.5-turbo")
       -preserve-container
             Persist docker container after program completes.
       -split-limit int
