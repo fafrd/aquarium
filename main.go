@@ -120,7 +120,7 @@ func max(a, b int) int {
 }
 
 func main() {
-	goal := flag.String("goal", "Your goal is to execute a verbose port scan of amazon.com.",
+	goal := flag.String("goal", "Your goal is to run a Minecraft server.",
 		`Goal to give the AI. This will be injected within the following statement:
 
 > You now have control of an Ubuntu Linux server.
