@@ -32,6 +32,13 @@ Previous commands and outcomes:
 The original command was '%s'. What was the outcome?
 
 `
+	outcomeTruncated = `A Linux command was run, and it had a very long output. This is the last 10 lines:
+
+%s
+
+The original command was '%s'. What was the outcome?
+
+`
 	fragmentSummary = `This is the partial output of a Linux command. Please summarize what happened in this Linux command.
 
 %s
@@ -79,6 +86,11 @@ func GenNextDialogue(goal string, previousCommands []CommandPair) (string, error
 
 	firstLine := strings.Split(result, "\n")[0]
 	return firstLine, nil
+}
+
+func GenCommandOutcomeTruncated(previousCommand string, previousOutput string) (string, error) {
+	prompt := fmt.Sprintf(outcomeTruncated, previousOutput, previousCommand)
+	return genDialogue(prompt)
 }
 
 func GenCommandOutcome(previousCommand string, previousOutput string, recursionDepthLimit int) (string, error) {
@@ -174,8 +186,6 @@ func summarizeCommandOutputSingle(half string, recursionDepth int, recursionDept
 		if strings.Contains(fmt.Sprintf("%s", err), "Please reduce your prompt") {
 			logger.Logf("Last command output was STILL too large to process in one request. Splitting again...\n")
 			if recursionDepth+1 > recursionDepthLimit {
-				// There's a more graceful way to handle this than imposing recursionDepthLimit
-				// we could return the summaries so far, or could summarize just the last chunk somehow
 				errChan <- fmt.Errorf("recursion depth limit exceeded. Output from last command was too large. (limit is %d, which implies a max of %d requests to OpenAI)", recursionDepthLimit, int(math.Pow(2, float64(recursionDepthLimit))))
 				return
 			}

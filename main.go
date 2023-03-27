@@ -131,11 +131,21 @@ func main() {
 
 `)
 	debug := flag.Bool("debug", false, "Enable logging of AI prompts to debug.log")
-	preserveContainer := flag.Bool("preserve-container", false, "Persist docker container after program exits.")
+	preserveContainer := flag.Bool("preserve-container", false, "Persist docker container after program completes.")
 	iterationLimit := flag.Int("limit", 30, "Maximum number of commands the AI should run.")
-	recursionDepthLimit := flag.Int("split-limit", 3, "When parsing long responses, we split up the response into chunks and ask the AI to summarize each chunk.\nsplit-limit is the maximum number of times we will split the response.")
+	contextMode := flag.String("context-mode", "partial",
+		`How much context from the previous command do we give the AI? This is used by the AI to determine what to run next.
+- partial: We send the last 10 lines of the terminal output to the AI. (cheap, somewhat accurate)
+- full: We send the entire terminal output to the AI. (expensive, very accurate)
+
+`)
+	recursionDepthLimit := flag.Int("split-limit", 3, "When context-mode=full, we split up the response into chunks and ask the AI to summarize each chunk.\nsplit-limit is the maximum number of times we will split the response.")
 
 	flag.Parse()
+
+	if *contextMode != "partial" && *contextMode != "full" {
+		fmt.Println("Invalid context-mode. Must be 'partial' or 'full'.")
+	}
 
 	logch := make(chan string, 10000)  // general log messages; each one is appended (with newline)
 	termch := make(chan string, 10000) // terminal log messages; each one completely replaces the previous
@@ -160,7 +170,7 @@ func main() {
 	}()
 
 	go func() {
-		actor := actor.NewActor(*goal, *iterationLimit, *recursionDepthLimit)
+		actor := actor.NewActor(*goal, *contextMode, *iterationLimit, *recursionDepthLimit)
 		<-actor.Loop()
 		if !*preserveContainer {
 			err := actor.CleanupContainer()

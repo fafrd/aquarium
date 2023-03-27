@@ -29,6 +29,7 @@ type Actor struct {
 	terminalStateOutcomes []ai.CommandPair // [command: outcome, command: outcome, etc]
 	containerId           string
 	goal                  string
+	contextMode           string
 	id                    string
 	iterationCount        int
 	iterationLimit        int
@@ -36,12 +37,13 @@ type Actor struct {
 	quit                  chan struct{}
 }
 
-func NewActor(goal string, iterationLimit int, recursionDepthLimit int) *Actor {
+func NewActor(goal string, contextMode string, iterationLimit int, recursionDepthLimit int) *Actor {
 	rand.Seed(time.Now().UnixNano())
 	id := fmt.Sprintf("%08x", rand.Uint32())
 
 	return &Actor{
 		goal:                goal,
+		contextMode:         contextMode,
 		recursionDepthLimit: recursionDepthLimit,
 		iterationLimit:      iterationLimit,
 		id:                  id,
@@ -54,6 +56,7 @@ func (a *Actor) Loop() <-chan struct{} {
 	done := make(chan struct{})
 	logger.Logf("%s Starting actor loop.\n", a.id)
 	logger.Logf("%s Prompt: %s\n", a.id, a.goal)
+	logger.Logf("%s Context mode: %s\n", a.id, a.contextMode)
 
 	// instantiate docker container
 	ctx := context.Background()
@@ -205,13 +208,27 @@ func (a *Actor) iteration() {
 	} else {
 		logger.Logf("%s iteration %d: asking AI to summarize output of previous command... \n", a.id, a.iterationCount)
 
-		prevCommandOutcome, err := ai.GenCommandOutcome(a.lastCommand, a.lastCommandOutput, a.recursionDepthLimit)
+		var prevCommandOutcome string
+		if a.contextMode == "full" {
+			prevCommandOutcome, err = ai.GenCommandOutcome(a.lastCommand, a.lastCommandOutput, a.recursionDepthLimit)
+		} else {
+			lines := strings.Split(a.lastCommandOutput, "\n")
+			if len(lines) <= 10 {
+				// short output, so use the normal approach
+				prevCommandOutcome, err = ai.GenCommandOutcome(a.lastCommand, a.lastCommandOutput, a.recursionDepthLimit)
+			} else {
+				// long output, so summarize last X lines only
+				const CONTEXT_LINES = 10
+				lastCommandOutputTruncated := strings.Join(lines[len(lines)-CONTEXT_LINES:], "\n")
+				prevCommandOutcome, err = ai.GenCommandOutcomeTruncated(a.lastCommand, lastCommandOutputTruncated)
+			}
+		}
 		if err != nil {
 			handleError(err)
 			return
 		}
 
-		// append to a.terminalStateSummaries
+		// append to a.terminalStateOutcomes
 		a.terminalStateOutcomes = append(a.terminalStateOutcomes, ai.CommandPair{
 			Command: a.lastCommand,
 			Result:  prevCommandOutcome,
