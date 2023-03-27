@@ -128,16 +128,14 @@ func main() {
 > Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
 >
 > Respond with a linux command to give to the server.
-
 `)
 	debug := flag.Bool("debug", false, "Enable logging of AI prompts to debug.log")
 	preserveContainer := flag.Bool("preserve-container", false, "Persist docker container after program completes.")
 	iterationLimit := flag.Int("limit", 30, "Maximum number of commands the AI should run.")
 	contextMode := flag.String("context-mode", "partial",
 		`How much context from the previous command do we give the AI? This is used by the AI to determine what to run next.
-- partial: We send the last 10 lines of the terminal output to the AI. (cheap, somewhat accurate)
+- partial: We send the last 10 lines of the terminal output to the AI. (cheap, accurate)
 - full: We send the entire terminal output to the AI. (expensive, very accurate)
-
 `)
 	recursionDepthLimit := flag.Int("split-limit", 3, "When context-mode=full, we split up the response into chunks and ask the AI to summarize each chunk.\nsplit-limit is the maximum number of times we will split the response.")
 
