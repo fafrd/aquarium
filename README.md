@@ -32,8 +32,13 @@ Pass your prompt in the form of a goal. For example, `--goal "Your goal is to ru
 
     ./aquarium -h
     Usage of ./aquarium:
+      -context-mode string
+            How much context from the previous command do we give the AI? This is used by the AI to determine what to run next.
+            - partial: We send the last 10 lines of the terminal output to the AI. (cheap, accurate)
+            - full: We send the entire terminal output to the AI. (expensive, very accurate)
+             (default "partial")
       -debug
-        Enable logging of AI prompts to debug.log
+            Enable logging of AI prompts to debug.log
       -goal string
             Goal to give the AI. This will be injected within the following statement:
 
@@ -42,14 +47,13 @@ Pass your prompt in the form of a goal. For example, `--goal "Your goal is to ru
             > Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
             >
             > Respond with a linux command to give to the server.
-
-             (default "Your goal is to execute a verbose port scan of amazon.com.")
+             (default "Your goal is to run a Minecraft server.")
       -limit int
             Maximum number of commands the AI should run. (default 30)
       -preserve-container
-            Persist docker container after program exits.
+            Persist docker container after program completes.
       -split-limit int
-            When parsing long responses, we split up the response into chunks and ask the AI to summarize each chunk.
+            When context-mode=full, we split up the response into chunks and ask the AI to summarize each chunk.
             split-limit is the maximum number of times we will split the response. (default 3)
 
 ## Logs
@@ -64,7 +68,7 @@ Calls to OpenAI are not logged unless you add the `--debug` flag. API requests a
 ## Agent loop
 1. Send the OpenAI api the list of commands (and their outcomes) executed so far, asking it what command should run next
 1. Execute command in docker VM
-1. Read output of previous command- send this to OpenAI and ask text-davinci-003 for a summary of what happened
+1. Read output of previous command- send this to OpenAI and ask gpt-3.5-turbo for a summary of what happened
     1. If the output was too long, OpenAI api will return a 400
     1. Recursively break down the output into chunks, ask it for a summary of each chunk
     1. Ask OpenAI for a summary-of-summaries to get a final answer about what this command did
@@ -91,4 +95,3 @@ Installs the software, helpfully allows port 6667 through the firewall, then tri
 - The AI cannot give input to running programs. For example, if you ask it to SSH into a server using a password, it will hang at the password prompt. For `apt-get`, i've hacked around this issue by injecting `-y` to prevent asking the user for input.
 - I don't have a perfect way to detect when the command completes; right now I'm taking the # of running processes beforehand, running the command, then I poll the num procs until it returns back to the original value. This is a brittle solution
 - The terminal output handling is imperfect. Some commands, like wget, use \\r to write the progress bar... I rewrite that as a \\n instead. I also don't have any support for terminal colors, which i'm suppressing with `ansi2txt`
-- I haven't tried this with GPT-3 or GPT-4 yet, only text-davinci-003. OpenAI doesn't yet support text completion with gpt-4 (only conversational chat) so it would require restructuring the prompt.
