@@ -102,7 +102,7 @@ func GenCommandOutcome(previousCommand string, previousOutput string, recursionD
 	response, err := genDialogue(prompt)
 
 	if err != nil {
-		if strings.Contains(fmt.Sprintf("%s", err), "Please reduce your prompt") {
+		if strings.Contains(fmt.Sprintf("%s", err), "Please reduce the length of the messages") {
 			logger.Logf("Last command output was too large to process in one request. Splitting output into chunks and summarizing chunks individually.\n")
 
 			// recursively chunk up the output and get chunk summaries
@@ -183,7 +183,7 @@ func summarizeCommandOutputSingle(half string, recursionDepth int, recursionDept
 			Result:  halfSummary,
 		}}
 	} else {
-		if strings.Contains(fmt.Sprintf("%s", err), "Please reduce your prompt") {
+		if strings.Contains(fmt.Sprintf("%s", err), "Please reduce the length of the messages") {
 			logger.Logf("Last command output was STILL too large to process in one request. Splitting again...\n")
 			if recursionDepth+1 > recursionDepthLimit {
 				errChan <- fmt.Errorf("recursion depth limit exceeded. Output from last command was too large. (limit is %d, which implies a max of %d requests to OpenAI)", recursionDepthLimit, int(math.Pow(2, float64(recursionDepthLimit))))
@@ -222,18 +222,26 @@ func genDialogue(aiPrompt string) (string, error) {
 
 	logger.Debugf("### Sending request to OpenAI:\n%s\n\n", aiPrompt)
 
-	resp, err := client.CompletionWithEngine(ctx, "text-davinci-003", gpt3.CompletionRequest{
-		Prompt:      []string{aiPrompt},
-		MaxTokens:   gpt3.IntPtr(tokens),
+	messages := []gpt3.ChatCompletionRequestMessage{
+		{
+			Role:    "user",
+			Content: aiPrompt,
+		},
+	}
+	request := gpt3.ChatCompletionRequest{
+		Model:       "gpt-3.5-turbo",
+		Messages:    messages,
+		MaxTokens:   tokens,
 		Temperature: gpt3.Float32Ptr(0.0),
-		Echo:        false,
-	})
+	}
+	resp, err := client.ChatCompletion(ctx, request)
+
 	if err != nil {
 		logger.Debugf("### ERROR from OpenAI:\n%s\n\n", err)
 		return "", err
 	}
 
-	trimmedResponse := strings.TrimSpace(resp.Choices[0].Text)
+	trimmedResponse := strings.TrimSpace(resp.Choices[0].Message.Content)
 	logger.Debugf("### Received response from OpenAI:\n%s\n\n\n", trimmedResponse)
 	return trimmedResponse, nil
 }
