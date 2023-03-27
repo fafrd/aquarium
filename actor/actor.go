@@ -232,10 +232,10 @@ func (a *Actor) iteration() {
 		replacement := "${1}-y $2"
 		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
 	}
-	// rewrite apt-get as apt-get -q
+	// rewrite apt-get as apt-get -qq
 	if !strings.Contains(nextCommand, "-q") {
 		pattern := regexp.MustCompile(`(apt(?:-get)?\s+(?:install|upgrade)\s+)(\S+)`)
-		replacement := "${1}-q $2"
+		replacement := "${1}-qq $2"
 		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
 	}
 	// rewrite wget as wget -nv
