@@ -15,6 +15,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 
 	"time"
 )
@@ -120,7 +121,7 @@ func (a *Actor) Loop() <-chan struct{} {
 
 	logger.Logf("%s Container terminal attached: %s\n", a.id, a.containerId)
 
-	// Log all output from actor's terminal to logger.LogTerminalf()
+	// Log all output from actor's terminal to logger.lLogTerminalf()
 	go func() {
 		for {
 			time.Sleep(50 * time.Millisecond) // terminal logging interval
@@ -180,13 +181,17 @@ func (a *Actor) iteration() {
 		if err != nil {
 			return nil, 0, err
 		}
-		var buf bytes.Buffer
-		if _, err := io.Copy(&buf, operatorExecConnection.Reader); err != nil {
+		defer operatorExecConnection.Close()
+
+		var stdoutBuf bytes.Buffer
+		// ignore stderr lol
+		_, err = stdcopy.StdCopy(&stdoutBuf, io.Discard, operatorExecConnection.Reader)
+		if err != nil {
 			return nil, 0, err
 		}
 
 		kv := make(map[int]string)
-		lines := strings.Split(buf.String(), "\n")
+		lines := strings.Split(stdoutBuf.String(), "\n")
 		for _, line := range lines {
 			fields := strings.Fields(line)
 			if len(fields) == 3 {
@@ -246,16 +251,16 @@ func (a *Actor) iteration() {
 
 	}
 
-	// rewrite apt-get as apt-get -y
-	if !strings.Contains(nextCommand, "-y") {
-		pattern := regexp.MustCompile(`(apt(?:-get)?\s+(?:install|upgrade)\s+)(\S+)`)
-		replacement := "${1}-y $2"
-		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
-	}
 	// rewrite apt-get as apt-get -qq
 	if !strings.Contains(nextCommand, "-q") {
 		pattern := regexp.MustCompile(`(apt(?:-get)?\s+(?:install|upgrade)\s+)(\S+)`)
 		replacement := "${1}-qq $2"
+		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
+	}
+	// rewrite apt-get as apt-get -y
+	if !strings.Contains(nextCommand, "-y") {
+		pattern := regexp.MustCompile(`(apt(?:-get)?\s+(?:install|upgrade)\s+)(\S+)`)
+		replacement := "${1}-y $2"
 		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
 	}
 	// rewrite wget as wget -nv
@@ -339,34 +344,18 @@ func (a *Actor) ReadTerminalOut() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer operatorExecConnection.Close()
 
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, operatorExecConnection.Reader); err != nil {
+	var stdoutBuf bytes.Buffer
+	// we discard stderr here. we are using script(1) which records everything to stdout
+	_, err = stdcopy.StdCopy(&stdoutBuf, io.Discard, operatorExecConnection.Reader)
+	if err != nil {
 		return "", err
 	}
 
-	// The start of the buffer usually has some garbage bytes; read until the first ASCII
-	for {
-		bb, err := buf.ReadByte()
-		if err != nil {
-			break // end of buffer reached
-		}
-
-		if bb >= 32 && bb <= 126 {
-			// found the first ASCII character, create a new buffer with the remaining bytes
-			newBuf := bytes.NewBuffer([]byte{bb})
-			newBuf.ReadFrom(&buf)
-			buf = *newBuf
-			break
-		}
-	}
-
-	capturedTerminalOut := buf.String()
-
-	raw := capturedTerminalOut
+	raw := stdoutBuf.String()
 	var sanitized string
 	raw = strings.ReplaceAll(raw, "\r", "\n")
-	//raw = strings.ReplaceAll(raw, "%", "%%")
 
 	// remove any remaining lines that are pure whitespace
 	for _, line := range strings.Split(raw, "\n") {
