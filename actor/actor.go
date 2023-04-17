@@ -23,13 +23,13 @@ import (
 type Actor struct {
 	cli                   *client.Client
 	ctx                   context.Context
-	recursionDepthLimit   int
 	lastCommand           string
 	lastCommandOutput     string
 	terminalStateString   string
 	terminalStateOutcomes []ai.CommandPair // [command: outcome, command: outcome, etc]
 	containerId           string
 	model                 string
+	url                   string
 	goal                  string
 	contextMode           string
 	id                    string
@@ -39,19 +39,19 @@ type Actor struct {
 	quit                  chan struct{}
 }
 
-func NewActor(model string, goal string, contextMode string, iterationLimit int, recursionDepthLimit int) *Actor {
+func NewActor(model string, url string, goal string, contextMode string, iterationLimit int) *Actor {
 	rand.Seed(time.Now().UnixNano())
 	id := fmt.Sprintf("%08x", rand.Uint32())
 
 	return &Actor{
-		model:               model,
-		goal:                goal,
-		contextMode:         contextMode,
-		recursionDepthLimit: recursionDepthLimit,
-		iterationLimit:      iterationLimit,
-		id:                  id,
-		iterationCount:      0,
-		quit:                make(chan struct{}),
+		model:          model,
+		url:            url,
+		goal:           goal,
+		contextMode:    contextMode,
+		iterationLimit: iterationLimit,
+		id:             id,
+		iterationCount: 0,
+		quit:           make(chan struct{}),
 	}
 }
 
@@ -208,7 +208,7 @@ func (a *Actor) iteration() {
 
 	if a.iterationCount == 1 {
 		logger.Logf("%s iteration %d: asking AI for next command...\n", a.id, a.iterationCount)
-		nextCommand, err = ai.GenInitialDialogue(a.model, a.goal)
+		nextCommand, err = ai.GenInitialCommand(a.model, a.url, a.goal)
 		if err != nil {
 			handleError(err)
 			return
@@ -218,17 +218,17 @@ func (a *Actor) iteration() {
 
 		var prevCommandOutcome string
 		if a.contextMode == "full" {
-			prevCommandOutcome, err = ai.GenCommandOutcome(a.model, a.lastCommand, a.lastCommandOutput, a.recursionDepthLimit)
+			prevCommandOutcome, err = ai.GenCommandOutcome(a.model, a.url, a.lastCommand, a.lastCommandOutput)
 		} else {
 			lines := strings.Split(a.lastCommandOutput, "\n")
 			if len(lines) <= 10 {
 				// short output, so use the normal approach
-				prevCommandOutcome, err = ai.GenCommandOutcome(a.model, a.lastCommand, a.lastCommandOutput, a.recursionDepthLimit)
+				prevCommandOutcome, err = ai.GenCommandOutcome(a.model, a.url, a.lastCommand, a.lastCommandOutput)
 			} else {
 				// long output, so summarize last X lines only
 				const CONTEXT_LINES = 10
 				lastCommandOutputTruncated := strings.Join(lines[len(lines)-CONTEXT_LINES:], "\n")
-				prevCommandOutcome, err = ai.GenCommandOutcomeTruncated(a.model, a.lastCommand, lastCommandOutputTruncated)
+				prevCommandOutcome, err = ai.GenCommandOutcomeTruncated(a.model, a.url, a.lastCommand, lastCommandOutputTruncated)
 			}
 		}
 		if err != nil {
@@ -243,7 +243,7 @@ func (a *Actor) iteration() {
 		})
 
 		logger.Logf("%s iteration %d: asking AI for next command...\n", a.id, a.iterationCount)
-		nextCommand, err = ai.GenNextDialogue(a.model, a.goal, a.terminalStateOutcomes)
+		nextCommand, err = ai.GenNextCommand(a.model, a.url, a.goal, a.terminalStateOutcomes)
 		if err != nil {
 			handleError(err)
 			return

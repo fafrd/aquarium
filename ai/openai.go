@@ -2,10 +2,14 @@ package ai
 
 import (
 	"aquarium/logger"
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -49,7 +53,8 @@ The original command was '%s'. What was the outcome?
 %sThe original command was '%s'. What was the outcome?
 
 `
-	tokens = 200
+	tokens              = 200
+	recursionDepthLimit = 3
 )
 
 type CommandPair struct {
@@ -61,9 +66,9 @@ func (c CommandPair) String() string {
 	return fmt.Sprintf("%s\n%s", c.Command, c.Result)
 }
 
-func GenInitialDialogue(model string, goal string) (string, error) {
+func GenInitialCommand(model string, url string, goal string) (string, error) {
 	prompt := fmt.Sprintf(initialPrompt, goal)
-	result, err := genDialogue(model, prompt)
+	result, err := genDialogue(model, url, prompt, true)
 	if err != nil {
 		return "", err
 	}
@@ -72,14 +77,14 @@ func GenInitialDialogue(model string, goal string) (string, error) {
 	return firstLine, nil
 }
 
-func GenNextDialogue(model string, goal string, previousCommands []CommandPair) (string, error) {
+func GenNextCommand(model string, url string, goal string, previousCommands []CommandPair) (string, error) {
 	var previousCommandsString string
 	for _, pair := range previousCommands {
 		previousCommandsString += fmt.Sprintf("%s\n\n", pair)
 	}
 
 	prompt := fmt.Sprintf(nextPrompt, goal, previousCommandsString)
-	result, err := genDialogue(model, prompt)
+	result, err := genDialogue(model, url, prompt, true)
 	if err != nil {
 		return "", err
 	}
@@ -88,31 +93,31 @@ func GenNextDialogue(model string, goal string, previousCommands []CommandPair) 
 	return firstLine, nil
 }
 
-func GenCommandOutcomeTruncated(model string, previousCommand string, previousOutput string) (string, error) {
+func GenCommandOutcomeTruncated(model string, url string, previousCommand string, previousOutput string) (string, error) {
 	prompt := fmt.Sprintf(outcomeTruncated, previousOutput, previousCommand)
-	return genDialogue(model, prompt)
+	return genDialogue(model, url, prompt, false)
 }
 
-func GenCommandOutcome(model string, previousCommand string, previousOutput string, recursionDepthLimit int) (string, error) {
+func GenCommandOutcome(model string, url string, previousCommand string, previousOutput string) (string, error) {
 	if previousOutput == "" {
 		return "There was no output from this command.", nil
 	}
 
 	prompt := fmt.Sprintf(outcomeSingle, previousOutput, previousCommand)
-	response, err := genDialogue(model, prompt)
+	response, err := genDialogue(model, url, prompt, false)
 
 	if err != nil {
 		if strings.Contains(fmt.Sprintf("%s", err), "Please reduce the length of the messages") {
 			logger.Logf("Last command output was too large to process in one request. Splitting output into chunks and summarizing chunks individually.\n")
 
 			// recursively chunk up the output and get chunk summaries
-			summaries, err := summarizeCommandOutputMultipart(model, previousOutput, 1, recursionDepthLimit)
+			summaries, err := summarizeCommandOutputMultipart(model, url, previousOutput, 1)
 			if err != nil {
 				return "", err
 			}
 
 			// then ask for the outcome of those summaries
-			response, err = determineOutcomeOfSummaryChunks(model, previousCommand, summaries)
+			response, err = determineOutcomeOfSummaryChunks(model, url, previousCommand, summaries)
 			if err != nil {
 				return "", err
 			}
@@ -124,7 +129,7 @@ func GenCommandOutcome(model string, previousCommand string, previousOutput stri
 	return response, nil
 }
 
-func summarizeCommandOutputMultipart(model string, output string, recursionDepth int, recursionDepthLimit int) ([]CommandPair, error) {
+func summarizeCommandOutputMultipart(model string, url string, output string, recursionDepth int) ([]CommandPair, error) {
 	summaries := make([]CommandPair, 0)
 
 	outputLines := strings.Split(output, "\n")
@@ -138,8 +143,8 @@ func summarizeCommandOutputMultipart(model string, output string, recursionDepth
 
 	wg.Add(2)
 
-	go summarizeCommandOutputSingle(model, firstHalf, recursionDepth, recursionDepthLimit, resultChan, errChan, &wg)
-	go summarizeCommandOutputSingle(model, secondHalf, recursionDepth, recursionDepthLimit, resultChan, errChan, &wg)
+	go summarizeCommandOutputSingle(model, url, firstHalf, recursionDepth, resultChan, errChan, &wg)
+	go summarizeCommandOutputSingle(model, url, secondHalf, recursionDepth, resultChan, errChan, &wg)
 
 	go func() {
 		wg.Wait()
@@ -171,12 +176,12 @@ func summarizeCommandOutputMultipart(model string, output string, recursionDepth
 	return summaries, nil
 }
 
-func summarizeCommandOutputSingle(model string, half string, recursionDepth int, recursionDepthLimit int, resultChan chan<- []CommandPair, errChan chan<- error, wg *sync.WaitGroup) {
+func summarizeCommandOutputSingle(model string, url string, half string, recursionDepth int, resultChan chan<- []CommandPair, errChan chan<- error, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	logger.Logf("Summarizing chunk...\n")
 	prompt := fmt.Sprintf(fragmentSummary, half)
-	halfSummary, err := genDialogue(model, prompt)
+	halfSummary, err := genDialogue(model, url, prompt, false)
 	if err == nil {
 		resultChan <- []CommandPair{{
 			Command: half,
@@ -189,7 +194,7 @@ func summarizeCommandOutputSingle(model string, half string, recursionDepth int,
 				errChan <- fmt.Errorf("recursion depth limit exceeded. Output from last command was too large. (limit is %d, which implies a max of %d requests to OpenAI)", recursionDepthLimit, int(math.Pow(2, float64(recursionDepthLimit))))
 				return
 			}
-			halfPair, err := summarizeCommandOutputMultipart(model, half, recursionDepth+1, recursionDepthLimit)
+			halfPair, err := summarizeCommandOutputMultipart(model, url, half, recursionDepth+1)
 			if err != nil {
 				errChan <- err
 			} else {
@@ -201,47 +206,117 @@ func summarizeCommandOutputSingle(model string, half string, recursionDepth int,
 	}
 }
 
-func determineOutcomeOfSummaryChunks(model string, command string, summaries []CommandPair) (string, error) {
+func determineOutcomeOfSummaryChunks(model string, url string, command string, summaries []CommandPair) (string, error) {
 	var previousSummariesString string
 	for i, pair := range summaries {
 		previousSummariesString += fmt.Sprintf("Part %d:\n%s\n\n", i+1, pair.Result)
 	}
 
 	prompt := fmt.Sprintf(totalSummary, previousSummariesString, command)
-	return genDialogue(model, prompt)
+	return genDialogue(model, url, prompt, false)
 }
 
-func genDialogue(model string, aiPrompt string) (string, error) {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		return "", errors.New("undefined env var OPENAI_API_KEY")
+func genDialogue(model string, url string, aiPrompt string, expectsCommand bool) (string, error) {
+	if model != "local" {
+		apiKey := os.Getenv("OPENAI_API_KEY")
+		if apiKey == "" {
+			return "", errors.New("undefined env var OPENAI_API_KEY")
+		}
+
+		ctx := context.Background()
+		client := gpt3.NewClient(apiKey)
+
+		logger.Debugf("### Sending request to OpenAI:\n%s\n\n", aiPrompt)
+
+		messages := []gpt3.ChatCompletionRequestMessage{
+			{
+				Role:    "user",
+				Content: aiPrompt,
+			},
+		}
+		request := gpt3.ChatCompletionRequest{
+			Model:       model,
+			Messages:    messages,
+			MaxTokens:   tokens,
+			Temperature: gpt3.Float32Ptr(0.0),
+		}
+		resp, err := client.ChatCompletion(ctx, request)
+
+		if err != nil {
+			logger.Debugf("### ERROR from OpenAI:\n%s\n\n", err)
+			return "", err
+		}
+
+		trimmedResponse := strings.TrimSpace(resp.Choices[0].Message.Content)
+		logger.Debugf("### Received response from OpenAI:\n%s\n\n\n", trimmedResponse)
+		return trimmedResponse, nil
+	} else {
+		var aiPromptInstruction string
+		if expectsCommand {
+			aiPromptInstruction = fmt.Sprintf("\n\n### Instructions:\n%s\n### Response:\n$", aiPrompt)
+		} else {
+			aiPromptInstruction = fmt.Sprintf("\n\n### Instructions:\n%s\n### Response:\n", aiPrompt)
+		}
+
+		data := struct {
+			Prompt string   `json:"prompt"`
+			Stop   []string `json:"stop"`
+		}{
+			Prompt: aiPromptInstruction,
+			Stop:   []string{"\n", "###"},
+		}
+		payloadBytes, err := json.Marshal(data)
+		if err != nil {
+			logger.Debugf("### ERROR marshalling json:\n%s\n\n", err)
+			return "", err
+		}
+		body := bytes.NewReader(payloadBytes)
+
+		req, err := http.NewRequest("POST", "http://localhost:8000/v1/completions", body)
+		if err != nil {
+			logger.Debugf("### ERROR constructing http request:\n%s\n\n", err)
+			return "", err
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Content-Type", "application/json")
+
+		logger.Debugf("### Sending request to local model:\n%s\n\n", aiPromptInstruction)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			logger.Debugf("### ERROR from local model:\n%s\n\n", err)
+			return "", err
+		}
+		defer resp.Body.Close()
+
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			logger.Debugf("### ERROR from local model:\n%s\n\n", err)
+			return "", err
+		}
+
+		logger.Debugf("### Received raw response from local model:\n%s\n\n\n", respBody)
+
+		// llama-cpp-python responds in the form of:
+		// {"id":"cmpl-edfe21b1-01f4-4fb0-aef3-60b2e141404d","object":"text_completion","created":1681768157,"model":"../../13B/ggml-model-q4_0.bin","choices":[{"text":" sudo -i","index":0,"logprobs":null,"finish_reason":"stop"}],"usage":{"prompt_tokens":65,"completion_tokens":4,"total_tokens":69}
+
+		var respBodyMap map[string]interface{}
+		err = json.Unmarshal(respBody, &respBodyMap)
+		if err != nil {
+			logger.Debugf("### ERROR from local model:\n%s\n\n", err)
+			return "", err
+		}
+
+		// type assertion magic
+		choices := respBodyMap["choices"].([]interface{})
+		choice := choices[0].(map[string]interface{})
+		text := choice["text"].(string)
+		trimmedResponse := strings.TrimSpace(text)
+		if trimmedResponse == "" {
+			return "", errors.New("empty response from local model")
+		}
+
+		logger.Debugf("### Received response from local model:\n%s\n\n\n", trimmedResponse)
+		return trimmedResponse, nil
 	}
-
-	ctx := context.Background()
-	client := gpt3.NewClient(apiKey)
-
-	logger.Debugf("### Sending request to OpenAI:\n%s\n\n", aiPrompt)
-
-	messages := []gpt3.ChatCompletionRequestMessage{
-		{
-			Role:    "user",
-			Content: aiPrompt,
-		},
-	}
-	request := gpt3.ChatCompletionRequest{
-		Model:       model,
-		Messages:    messages,
-		MaxTokens:   tokens,
-		Temperature: gpt3.Float32Ptr(0.0),
-	}
-	resp, err := client.ChatCompletion(ctx, request)
-
-	if err != nil {
-		logger.Debugf("### ERROR from OpenAI:\n%s\n\n", err)
-		return "", err
-	}
-
-	trimmedResponse := strings.TrimSpace(resp.Choices[0].Message.Content)
-	logger.Debugf("### Received response from OpenAI:\n%s\n\n\n", trimmedResponse)
-	return trimmedResponse, nil
 }

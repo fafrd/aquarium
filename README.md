@@ -26,17 +26,24 @@ Inspired by [xkcd.com/350](https://xkcd.com/350/) and [Optimality is the tiger, 
 
 Pass your prompt in the form of a goal. For example, `--goal "Your goal is to run a minecraft server."`
 
+Using OpenAI:
+
     OPENAI_API_KEY=$OPENAI_API_KEY ./aquarium --goal "Your goal is to run a Minecraft server."
+
+Using a local model provided by [llama-cpp-python](https://github.com/abetlen/llama-cpp-python):
+
+    ./aquarium --goal "Your goal is to run a Minecraft server." --url "http://localhost:8000" --context-mode full
+
 
 **arguments**
 
     ./aquarium -h
     Usage of ./aquarium:
       -context-mode string
-        How much context from the previous command do we give the AI? This is used by the AI to determine what to run next.
-        - partial: We send the last 10 lines of the terminal output to the AI. (cheap, accurate)
-        - full: We send the entire terminal output to the AI. (expensive, very accurate)
-         (default "partial")
+            How much context from the previous command do we give the AI? This is used by the AI to determine what to run next.
+            - partial: We send the last 10 lines of the terminal output to the AI. (cheap, accurate)
+            - full: We send the entire terminal output to the AI. (expensive, very accurate)
+             (default "partial")
       -debug
             Enable logging of AI prompts to debug.log
       -goal string
@@ -51,19 +58,18 @@ Pass your prompt in the form of a goal. For example, `--goal "Your goal is to ru
       -limit int
             Maximum number of commands the AI should run. (default 30)
       -model string
-            OpenAI model to use. gpt-4 is best, but most expensive. See https://platform.openai.com/docs/models (default "gpt-3.5-turbo")
+            OpenAI model to use. Ignored if --url is provided. See https://platform.openai.com/docs/models (default "gpt-3.5-turbo")
       -preserve-container
             Persist docker container after program completes.
-      -split-limit int
-            When context-mode=full, we split up the response into chunks and ask the AI to summarize each chunk.
-            split-limit is the maximum number of times we will split the response. (default 3)
+      -url string
+            URL to locally hosted endpoint. If provided, this supersedes the --model flag.
 
 ## Logs
 
 The left side of the screen contains general information about the state of the program. The right side contains the terminal, as seen by the AI.
 <br />These are written to aquarium.log and terminal.log.
 
-Calls to OpenAI are not logged unless you add the `--debug` flag. API requests and responses will be appended to debug.log.
+Calls to the AI are not logged unless you add the `--debug` flag. API requests and responses will be appended to debug.log.
 
 # How it works
 
