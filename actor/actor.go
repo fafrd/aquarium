@@ -257,9 +257,9 @@ func (a *Actor) iteration() {
 		replacement := "${1}-qq $2"
 		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
 	}
-	// rewrite apt-get as apt-get -y
+	// add -y to apt, apt-get and add-apt-repository
 	if !strings.Contains(nextCommand, "-y") {
-		pattern := regexp.MustCompile(`(apt(?:-get)?\s+(?:install|upgrade)\s+)(\S+)`)
+		pattern := regexp.MustCompile(`(apt(?:-get)?\s+(?:install|upgrade)\s+|add-apt-repository\s+)(\S+)`)
 		replacement := "${1}-y $2"
 		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
 	}
