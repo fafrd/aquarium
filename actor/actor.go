@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"context"
@@ -167,40 +168,67 @@ func (a *Actor) iteration() {
 		close(a.quit)
 	}
 
-	getProcs := func() (procs map[int]string, count int, err error) {
-		// create operator connection
-		operatorExecConfig, err := a.cli.ContainerExecCreate(a.ctx, a.containerId, types.ExecConfig{
-			Cmd:          []string{"ps", "-u", "root,ubuntu", "-o", "pid=,user=,comm="},
+	getLastProcessPid := func() (int, error) {
+		execId, err := a.cli.ContainerExecCreate(a.ctx, a.containerId, types.ExecConfig{
+			Cmd:          []string{"cat", "/tmp/last.pid"},
 			AttachStderr: false,
 			AttachStdout: true,
 		})
 		if err != nil {
-			return nil, 0, err
+			return 0, err
 		}
-		operatorExecConnection, err := a.cli.ContainerExecAttach(a.ctx, operatorExecConfig.ID, types.ExecStartCheck{})
+		attachment, err := a.cli.ContainerExecAttach(a.ctx, execId.ID, types.ExecStartCheck{})
 		if err != nil {
-			return nil, 0, err
+			return 0, err
 		}
-		defer operatorExecConnection.Close()
+		defer attachment.Close()
 
 		var stdoutBuf bytes.Buffer
-		// ignore stderr lol
-		_, err = stdcopy.StdCopy(&stdoutBuf, io.Discard, operatorExecConnection.Reader)
+		_, err = stdcopy.StdCopy(&stdoutBuf, io.Discard, attachment.Reader)
 		if err != nil {
-			return nil, 0, err
+			return 0, err
 		}
 
-		kv := make(map[int]string)
-		lines := strings.Split(stdoutBuf.String(), "\n")
-		for _, line := range lines {
-			fields := strings.Fields(line)
-			if len(fields) == 3 {
-				pid := 0
-				fmt.Sscanf(fields[0], "%d", &pid)
-				kv[pid] = fields[1]
-			}
+		pid := strings.TrimSpace(stdoutBuf.String())
+		pidInt, err := strconv.Atoi(pid)
+		if err != nil {
+			return 0, err
 		}
-		return kv, len(kv), nil
+
+		return pidInt, nil
+	}
+
+	isLastProcessRunning := func() (bool, error) {
+		lastProcessPid, err := getLastProcessPid()
+		if err != nil {
+			return false, err
+		}
+		execId, err := a.cli.ContainerExecCreate(a.ctx, a.containerId, types.ExecConfig{
+			Cmd:          []string{"ls", "/proc/" + strconv.Itoa(lastProcessPid)},
+			AttachStderr: true,
+			AttachStdout: true,
+		})
+		if err != nil {
+			return false, err
+		}
+		attachment, err := a.cli.ContainerExecAttach(a.ctx, execId.ID, types.ExecStartCheck{})
+		if err != nil {
+			return false, err
+		}
+		defer attachment.Close()
+
+		var stderrBuf bytes.Buffer
+		_, err = stdcopy.StdCopy(io.Discard, &stderrBuf, attachment.Reader)
+		if err != nil {
+			return false, err
+		}
+
+		output := stderrBuf.String()
+		if strings.Contains(output, "cannot access") {
+			return false, nil
+		}
+
+		return true, nil
 	}
 
 	var nextCommand string
@@ -277,28 +305,27 @@ func (a *Actor) iteration() {
 		nextCommand = pattern.ReplaceAllString(nextCommand, replacement)
 	}
 
-	_, initialProcCount, err := getProcs()
 	if err != nil {
 		handleError(err)
 		return
 	}
 
+	realCommand := "/bin/bash -c \"echo \\$\\$>/tmp/last.pid && exec " + strings.ReplaceAll(nextCommand, "\"", "\"'\"'\"") + "\"\n"
 	// Execute command in container
 	logger.Logf("%s iteration %d: executing %s\n", a.id, a.iterationCount, nextCommand)
-	a.terminalConnection.Conn.Write([]byte(nextCommand + "\n"))
+	a.terminalConnection.Conn.Write([]byte(realCommand))
 
 	// wait for command to finish- poll getProcs until it returns the initial # of processes
-	// TODO checking num procs is a brittle approach
 	waitMessageSent := false
 	for {
-		_, procCount, err := getProcs()
+		isRunning, err := isLastProcessRunning()
 		time.Sleep(250 * time.Millisecond)
 		//logger.Logf("%s iteration %d: %d processes (initial proc count %d)\n", a.id, a.iterationCount, procCount, initialProcCount)
 		if err != nil {
 			handleError(err)
 			return
 		}
-		if procCount <= initialProcCount {
+		if !isRunning {
 			break
 		}
 		if !waitMessageSent {
