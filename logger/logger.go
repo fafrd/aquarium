@@ -100,6 +100,7 @@ func LogTerminalf(msg string, args ...interface{}) {
 
 	result := ""
 	msgFormatted := fmt.Sprintf(msg, args...)
+	// clean up the last.pid process tracking part
 	regex := regexp.MustCompile(`(.+?@.+?:.+?\$ )/bin/bash -c "echo \\\$\\\$>/tmp/last.pid && exec (.+?)"?$`)
 	regexUncutLine := regexp.MustCompile(`(.+?@.+?:.+?\$ )/bin/bash -c "echo \\\$\\\$>/tmp/last.pid && exec (.+?)"$`)
 	previousPartialMatch := false

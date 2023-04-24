@@ -101,5 +101,4 @@ Installs the software, helpfully allows port 6667 through the firewall, then tri
 
 - There's no success criteria- the program doesn't know when to stop. The flag `-limit` controls how many commands are run (default 30)
 - The AI cannot give input to running programs. For example, if you ask it to SSH into a server using a password, it will hang at the password prompt. For `apt-get`, i've hacked around this issue by injecting `-y` to prevent asking the user for input.
-- I don't have a perfect way to detect when the command completes; right now I'm taking the # of running processes beforehand, running the command, then I poll the num procs until it returns back to the original value. This is a brittle solution
 - The terminal output handling is imperfect. Some commands, like wget, use \\r to write the progress bar... I rewrite that as a \\n instead. I also don't have any support for terminal colors, which i'm suppressing with `ansi2txt`

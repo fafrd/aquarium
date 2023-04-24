@@ -276,7 +276,6 @@ func (a *Actor) iteration() {
 			handleError(err)
 			return
 		}
-
 	}
 
 	// rewrite apt-get as apt-get -qq
@@ -315,12 +314,11 @@ func (a *Actor) iteration() {
 	logger.Logf("%s iteration %d: executing %s\n", a.id, a.iterationCount, nextCommand)
 	a.terminalConnection.Conn.Write([]byte(realCommand))
 
-	// wait for command to finish- poll getProcs until it returns the initial # of processes
+	// wait for command to finish- poll isLastProcessRunning() until it returns false
 	waitMessageSent := false
 	for {
 		isRunning, err := isLastProcessRunning()
 		time.Sleep(250 * time.Millisecond)
-		//logger.Logf("%s iteration %d: %d processes (initial proc count %d)\n", a.id, a.iterationCount, procCount, initialProcCount)
 		if err != nil {
 			handleError(err)
 			return
