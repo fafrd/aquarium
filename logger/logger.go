@@ -3,6 +3,8 @@ package logger
 import (
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -96,9 +98,29 @@ func LogTerminalf(msg string, args ...interface{}) {
 		panic("logger not initialized")
 	}
 
+	result := ""
 	msgFormatted := fmt.Sprintf(msg, args...)
+	regex := regexp.MustCompile(`(.+?@.+?:.+?\$ )/bin/bash -c "echo \\\$\\\$>/tmp/last.pid && exec (.+?)"?$`)
+	regexUncutLine := regexp.MustCompile(`(.+?@.+?:.+?\$ )/bin/bash -c "echo \\\$\\\$>/tmp/last.pid && exec (.+?)"$`)
+	previousPartialMatch := false
+	for _, line := range strings.Split(msgFormatted, "\n") {
+		if regex.MatchString(line) {
+			result += strings.ReplaceAll(regex.ReplaceAllString(line, "${1}${2}"), "\"'\"'\"", "\"")
+			if !regexUncutLine.MatchString(line) {
+				previousPartialMatch = true
+			} else {
+				result += "\n"
+			}
+		} else {
+			if previousPartialMatch {
+				line = line[1 : len(line)-1]
+			}
+			previousPartialMatch = false
+			result += strings.ReplaceAll(line, "\"'\"'\"", "\"") + "\n"
+		}
+	}
 
-	termch <- msgFormatted
+	termch <- result
 
 	err := logTerminalFile.Truncate(0)
 	if err != nil {
