@@ -317,7 +317,27 @@ func (a *Actor) iteration() {
 		return
 	}
 
-	realCommand := "/bin/bash -c \"echo \\$\\$>/tmp/last.pid && exec " + strings.ReplaceAll(nextCommand, "\"", "\"'\"'\"") + "\"\n"
+	// Check if command starts with a shell builtin that can't be exec'd
+	shellBuiltins := []string{"cd", "export", "source", ".", "alias", "unalias", "set", "unset", "eval", "exec", "exit", "return", "break", "continue", "declare", "typeset", "local", "readonly", "shift"}
+	commandWords := strings.Fields(nextCommand)
+	isBuiltin := false
+	if len(commandWords) > 0 {
+		firstCommand := commandWords[0]
+		for _, builtin := range shellBuiltins {
+			if firstCommand == builtin {
+				isBuiltin = true
+				break
+			}
+		}
+	}
+
+	var realCommand string
+	if isBuiltin {
+		// For shell builtins, don't use exec since they can't be exec'd
+		realCommand = "/bin/bash -c \"echo \\$\\$>/tmp/last.pid; " + strings.ReplaceAll(nextCommand, "\"", "\"'\"'\"") + "\"\n"
+	} else {
+		realCommand = "/bin/bash -c \"echo \\$\\$>/tmp/last.pid && exec " + strings.ReplaceAll(nextCommand, "\"", "\"'\"'\"") + "\"\n"
+	}
 	// Execute command in container
 	logger.Logf("%s iteration %d: executing %s\n", a.id, a.iterationCount, nextCommand)
 	a.terminalConnection.Conn.Write([]byte(realCommand))

@@ -20,13 +20,13 @@ import (
 const (
 	initialPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output. (This is a noninteractive terminal, so you cannot use nano or vi.)
 
-Respond with a linux command to give to the server.
+Respond with a linux command to give to the server. Do NOT use markdown formatting or code blocks - respond with only the raw command.
 
 `
 	nextPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output. (This is a noninteractive terminal, so you cannot use nano or vi.)
 
 Previous commands and outcomes:
-%sGive the next input to the terminal.
+%sGive the next input to the terminal. Do NOT use markdown formatting or code blocks - respond with only the raw command.
 
 `
 	outcomeSingle = `A Linux command was run, and this was its output:
@@ -66,6 +66,32 @@ func (c CommandPair) String() string {
 	return fmt.Sprintf("%s\n%s", c.Command, c.Result)
 }
 
+// cleanMarkdownResponse removes markdown code block formatting from AI responses
+func cleanMarkdownResponse(response string) string {
+	response = strings.TrimSpace(response)
+
+	// Remove markdown code blocks (```bash, ```, etc.)
+	if strings.HasPrefix(response, "```") {
+		lines := strings.Split(response, "\n")
+		if len(lines) > 2 {
+			// Remove first line (```bash) and last line (```)
+			var cleanLines []string
+			for i, line := range lines {
+				if i == 0 || (i == len(lines)-1 && strings.TrimSpace(line) == "```") {
+					continue
+				}
+				if strings.TrimSpace(line) == "```" && i == len(lines)-1 {
+					continue
+				}
+				cleanLines = append(cleanLines, line)
+			}
+			response = strings.Join(cleanLines, "\n")
+		}
+	}
+
+	return strings.TrimSpace(response)
+}
+
 func GenInitialCommand(model string, url string, goal string) (string, error) {
 	prompt := fmt.Sprintf(initialPrompt, goal)
 	result, err := genDialogue(model, url, prompt, true)
@@ -73,6 +99,7 @@ func GenInitialCommand(model string, url string, goal string) (string, error) {
 		return "", err
 	}
 
+	result = cleanMarkdownResponse(result)
 	firstLine := strings.Split(result, "\n")[0]
 	return firstLine, nil
 }
@@ -89,6 +116,7 @@ func GenNextCommand(model string, url string, goal string, previousCommands []Co
 		return "", err
 	}
 
+	result = cleanMarkdownResponse(result)
 	firstLine := strings.Split(result, "\n")[0]
 	return firstLine, nil
 }
