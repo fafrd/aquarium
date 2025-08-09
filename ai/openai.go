@@ -14,7 +14,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/PullRequestInc/go-gpt3"
+	"github.com/sashabaranov/go-openai"
 )
 
 const (
@@ -53,7 +53,7 @@ The original command was '%s'. What was the outcome?
 %sThe original command was '%s'. What was the outcome?
 
 `
-	tokens              = 200
+	tokens              = 10000
 	recursionDepthLimit = 3
 )
 
@@ -100,7 +100,14 @@ func GenInitialCommand(model string, url string, goal string) (string, error) {
 	}
 
 	result = cleanMarkdownResponse(result)
-	firstLine := strings.Split(result, "\n")[0]
+	if result == "" {
+		return "", errors.New("AI returned empty response")
+	}
+	lines := strings.Split(result, "\n")
+	if len(lines) == 0 {
+		return "", errors.New("AI response contained no lines")
+	}
+	firstLine := lines[0]
 	return firstLine, nil
 }
 
@@ -117,7 +124,14 @@ func GenNextCommand(model string, url string, goal string, previousCommands []Co
 	}
 
 	result = cleanMarkdownResponse(result)
-	firstLine := strings.Split(result, "\n")[0]
+	if result == "" {
+		return "", errors.New("AI returned empty response")
+	}
+	lines := strings.Split(result, "\n")
+	if len(lines) == 0 {
+		return "", errors.New("AI response contained no lines")
+	}
+	firstLine := lines[0]
 	return firstLine, nil
 }
 
@@ -252,23 +266,23 @@ func genDialogue(model string, url string, aiPrompt string, expectsCommand bool)
 		}
 
 		ctx := context.Background()
-		client := gpt3.NewClient(apiKey)
+		client := openai.NewClient(apiKey)
 
 		logger.Debugf("### Sending request to OpenAI:\n%s\n\n", aiPrompt)
 
-		messages := []gpt3.ChatCompletionRequestMessage{
+		messages := []openai.ChatCompletionMessage{
 			{
-				Role:    "user",
+				Role:    openai.ChatMessageRoleUser,
 				Content: aiPrompt,
 			},
 		}
-		request := gpt3.ChatCompletionRequest{
-			Model:       model,
-			Messages:    messages,
-			MaxTokens:   tokens,
-			Temperature: gpt3.Float32Ptr(0.0),
+		request := openai.ChatCompletionRequest{
+			Model:              model,
+			Messages:           messages,
+			MaxCompletionTokens: tokens,
+			Temperature:        0.0,
 		}
-		resp, err := client.ChatCompletion(ctx, request)
+		resp, err := client.CreateChatCompletion(ctx, request)
 
 		if err != nil {
 			logger.Debugf("### ERROR from OpenAI:\n%s\n\n", err)
