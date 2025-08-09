@@ -31,7 +31,7 @@ screen -S aquarium bash -c 'OPENAI_API_KEY=$OPENAI_API_KEY ./aquarium --goal "Yo
 
 ### Key Command Line Options
 - `--goal`: The objective to give the AI (default: "Your goal is to run a Minecraft server.")
-- `--context-mode`: "partial" (last 10 lines) or "full" (entire output) - affects cost vs accuracy
+- `--context-mode`: "partial" (last 100 lines) or "full" (entire output) - affects cost vs accuracy
 - `--limit`: Maximum number of commands the AI should run (default: 30)
 - `--debug`: Enable logging of AI prompts to debug.log
 - `--preserve-container`: Keep Docker container after program completes

@@ -20,13 +20,27 @@ import (
 const (
 	initialPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output. (This is a noninteractive terminal, so you cannot use nano or vi.)
 
-Respond with a linux command to give to the server. Do NOT use markdown formatting or code blocks - respond with only the raw command.
+IMPORTANT: Respond with a single, simple linux command on one line. Do NOT use:
+- Complex shell constructs like bash -lc
+- Multiple commands chained with && or ;
+- Subshells or command substitution
+- Complex quoting or escaping
+- Markdown formatting or code blocks
+
+Just give ONE simple command that does ONE thing.
 
 `
 	nextPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output. (This is a noninteractive terminal, so you cannot use nano or vi.)
 
 Previous commands and outcomes:
-%sGive the next input to the terminal. Do NOT use markdown formatting or code blocks - respond with only the raw command.
+%sIMPORTANT: Give the next command as a single, simple linux command on one line. Do NOT use:
+- Complex shell constructs like bash -lc
+- Multiple commands chained with && or ;
+- Subshells or command substitution
+- Complex quoting or escaping
+- Markdown formatting or code blocks
+
+Just give ONE simple command that does ONE thing.
 
 `
 	outcomeSingle = `A Linux command was run, and this was its output:
@@ -36,7 +50,7 @@ Previous commands and outcomes:
 The original command was '%s'. What was the outcome?
 
 `
-	outcomeTruncated = `A Linux command was run, and it had a very long output. This is the last 10 lines:
+	outcomeTruncated = `A Linux command was run, and it had a very long output. This is the last 100 lines:
 
 %s
 
@@ -277,10 +291,10 @@ func genDialogue(model string, url string, aiPrompt string, expectsCommand bool)
 			},
 		}
 		request := openai.ChatCompletionRequest{
-			Model:              model,
-			Messages:           messages,
+			Model:               model,
+			Messages:            messages,
 			MaxCompletionTokens: tokens,
-			Temperature:        0.0,
+			Temperature:         0.0,
 		}
 		resp, err := client.CreateChatCompletion(ctx, request)
 

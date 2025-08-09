@@ -134,7 +134,7 @@ func main() {
 	iterationLimit := flag.Int("limit", 30, "Maximum number of commands the AI should run.")
 	contextMode := flag.String("context-mode", "partial",
 		`How much context from the previous command do we give the AI? This is used by the AI to determine what to run next.
-- partial: We send the last 10 lines of the terminal output to the AI. (cheap, accurate)
+- partial: We send the last 100 lines of the terminal output to the AI. (cheap, accurate)
 - full: We send the entire terminal output to the AI. (expensive, very accurate)
 `)
 	aiModel := flag.String("model", "gpt-5-nano", "OpenAI model to use. Ignored if --url is provided. See https://platform.openai.com/docs/models")

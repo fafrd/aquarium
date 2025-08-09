@@ -257,12 +257,12 @@ func (a *Actor) iteration() {
 			prevCommandOutcome, err = ai.GenCommandOutcome(a.model, a.url, a.lastCommand, a.lastCommandOutput)
 		} else {
 			lines := strings.Split(a.lastCommandOutput, "\n")
-			if len(lines) <= 10 {
+			if len(lines) <= 100 {
 				// short output, so use the normal approach
 				prevCommandOutcome, err = ai.GenCommandOutcome(a.model, a.url, a.lastCommand, a.lastCommandOutput)
 			} else {
 				// long output, so summarize last X lines only
-				const CONTEXT_LINES = 10
+				const CONTEXT_LINES = 100
 				lastCommandOutputTruncated := strings.Join(lines[len(lines)-CONTEXT_LINES:], "\n")
 				prevCommandOutcome, err = ai.GenCommandOutcomeTruncated(a.model, a.url, a.lastCommand, lastCommandOutputTruncated)
 			}
