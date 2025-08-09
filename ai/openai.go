@@ -18,7 +18,12 @@ import (
 )
 
 const (
-	initialPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
+	initialPrompt = `You now have control of a fresh Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
+
+SYSTEM CONTEXT:
+- This is a minimal Ubuntu installation - most software needs to be installed with 'sudo apt-get install -qq -y package-name'
+- Common tools like git, curl, build-essential, nginx, etc. are NOT pre-installed
+- Use 'which command-name' to check if a tool exists before using it
 
 CRITICAL ENVIRONMENT LIMITATIONS:
 - This is a noninteractive terminal - you cannot use nano, vi, or any text editors
@@ -37,7 +42,12 @@ IMPORTANT: Respond with a single, simple linux command on one line. Do NOT use:
 Just give ONE simple command that completes and exits.
 
 `
-	nextPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
+	nextPrompt = `You now have control of a fresh Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
+
+SYSTEM CONTEXT:
+- This is a minimal Ubuntu installation - most software needs to be installed with 'sudo apt-get install -qq -y package-name'
+- Common tools like git, curl, build-essential, nginx, etc. are NOT pre-installed
+- Use 'which command-name' to check if a tool exists before using it
 
 CRITICAL ENVIRONMENT LIMITATIONS:
 - This is a noninteractive terminal - you cannot use nano, vi, or any text editors
