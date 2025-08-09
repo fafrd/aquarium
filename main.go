@@ -137,7 +137,7 @@ func main() {
 - partial: We send the last 10 lines of the terminal output to the AI. (cheap, accurate)
 - full: We send the entire terminal output to the AI. (expensive, very accurate)
 `)
-	aiModel := flag.String("model", "gpt-3.5-turbo", "OpenAI model to use. Ignored if --url is provided. See https://platform.openai.com/docs/models")
+	aiModel := flag.String("model", "gpt-4o-mini", "OpenAI model to use. Ignored if --url is provided. See https://platform.openai.com/docs/models")
 	url := flag.String("url", "", "URL to locally hosted endpoint. If provided, this supersedes the --model flag.")
 
 	flag.Parse()

@@ -190,6 +190,10 @@ func (a *Actor) iteration() {
 		}
 
 		pid := strings.TrimSpace(stdoutBuf.String())
+		if pid == "" {
+			// No PID file exists yet (first run)
+			return 0, nil
+		}
 		pidInt, err := strconv.Atoi(pid)
 		if err != nil {
 			return 0, err
@@ -202,6 +206,10 @@ func (a *Actor) iteration() {
 		lastProcessPid, err := getLastProcessPid()
 		if err != nil {
 			return false, err
+		}
+		if lastProcessPid == 0 {
+			// No previous process to check (first run)
+			return false, nil
 		}
 		execId, err := a.cli.ContainerExecCreate(a.ctx, a.containerId, types.ExecConfig{
 			Cmd:          []string{"ls", "/proc/" + strconv.Itoa(lastProcessPid)},
