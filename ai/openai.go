@@ -33,14 +33,17 @@ Just give ONE simple command that does ONE thing.
 	nextPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output. (This is a noninteractive terminal, so you cannot use nano or vi.)
 
 Previous commands and outcomes:
-%sIMPORTANT: Give the next command as a single, simple linux command on one line. Do NOT use:
+%sCRITICAL: Before running any command, review the command history above. Do NOT repeat commands that you've already tried. If a command failed, try a fundamentally different approach, not just minor variations.
+
+IMPORTANT: Give the next command as a single, simple linux command on one line. Do NOT use:
 - Complex shell constructs like bash -lc
 - Multiple commands chained with && or ;
 - Subshells or command substitution
 - Complex quoting or escaping
 - Markdown formatting or code blocks
+- Commands you've already attempted
 
-Just give ONE simple command that does ONE thing.
+Just give ONE simple command that does ONE thing and that you haven't tried before.
 
 `
 	outcomeSingle = `A Linux command was run, and this was its output:
