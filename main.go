@@ -132,7 +132,7 @@ func main() {
 	debug := flag.Bool("debug", false, "Enable logging of AI prompts to debug.log")
 	preserveContainer := flag.Bool("preserve-container", false, "Persist docker container after program completes.")
 	iterationLimit := flag.Int("limit", 30, "Maximum number of commands the AI should run.")
-	commandTimeout := flag.Int("command-timeout", 60, "Maximum time in seconds to wait for a command to finish before force-killing it.")
+	commandTimeout := flag.Int("command-timeout", 60, "Maximum time in seconds to wait for a command to finish before force-killing it. Set to 0 to disable timeout.")
 	contextMode := flag.String("context-mode", "partial",
 		`How much context from the previous command do we give the AI? This is used by the AI to determine what to run next.
 - partial: We send the last 100 lines of the terminal output to the AI. (cheap, accurate)

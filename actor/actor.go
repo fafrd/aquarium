@@ -345,9 +345,8 @@ func (a *Actor) iteration() {
 	a.terminalConnection.Conn.Write([]byte(realCommand))
 
 	// wait for command to finish- poll isLastProcessRunning() until it returns false
-	// with a timeout to prevent hanging on interactive commands
+	// with optional timeout to prevent hanging on interactive commands
 	waitMessageSent := false
-	commandTimeout := time.Duration(a.commandTimeoutSeconds) * time.Second
 	startTime := time.Now()
 	for {
 		isRunning, err := isLastProcessRunning()
@@ -359,13 +358,16 @@ func (a *Actor) iteration() {
 		if !isRunning {
 			break
 		}
-		// Check for timeout
-		if time.Since(startTime) > commandTimeout {
-			logger.Logf("%s iteration %d: command timeout after %v seconds, force proceeding...\n", a.id, a.iterationCount, int(commandTimeout.Seconds()))
-			// Force kill the process by sending Ctrl+C to terminal
-			a.terminalConnection.Conn.Write([]byte("\x03")) // Ctrl+C
-			time.Sleep(500 * time.Millisecond) // Give it time to process
-			break
+		// Check for timeout (if enabled)
+		if a.commandTimeoutSeconds > 0 {
+			commandTimeout := time.Duration(a.commandTimeoutSeconds) * time.Second
+			if time.Since(startTime) > commandTimeout {
+				logger.Logf("%s iteration %d: command timeout after %v seconds, force proceeding...\n", a.id, a.iterationCount, int(commandTimeout.Seconds()))
+				// Force kill the process by sending Ctrl+C to terminal
+				a.terminalConnection.Conn.Write([]byte("\x03")) // Ctrl+C
+				time.Sleep(500 * time.Millisecond) // Give it time to process
+				break
+			}
 		}
 		if !waitMessageSent {
 			logger.Logf("%s iteration %d: waiting for command to finish...\n", a.id, a.iterationCount)
