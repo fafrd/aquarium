@@ -18,24 +18,38 @@ import (
 )
 
 const (
-	initialPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output. (This is a noninteractive terminal, so you cannot use nano or vi.)
+	initialPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
+
+CRITICAL ENVIRONMENT LIMITATIONS:
+- This is a noninteractive terminal - you cannot use nano, vi, or any text editors
+- Any command that waits for user input (like nc, irssi, top, less, more, tail -f) will be automatically killed after 60 seconds
+- Only use commands that complete and exit on their own
+- For interactive tools, use non-interactive alternatives (e.g., 'echo "test" | nc -w 1 host port' instead of 'nc host port')
 
 IMPORTANT: Respond with a single, simple linux command on one line. Do NOT use:
+- Interactive commands that wait for input
 - Complex shell constructs like bash -lc
 - Multiple commands chained with && or ;
 - Subshells or command substitution
 - Complex quoting or escaping
 - Markdown formatting or code blocks
 
-Just give ONE simple command that does ONE thing.
+Just give ONE simple command that completes and exits.
 
 `
-	nextPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output. (This is a noninteractive terminal, so you cannot use nano or vi.)
+	nextPrompt = `You now have control of an Ubuntu Linux server. %s Do not respond with any judgement, questions or explanations. You will give commands and I will respond with current terminal output.
+
+CRITICAL ENVIRONMENT LIMITATIONS:
+- This is a noninteractive terminal - you cannot use nano, vi, or any text editors
+- Any command that waits for user input (like nc, irssi, top, less, more, tail -f) will be automatically killed after 60 seconds
+- Only use commands that complete and exit on their own
+- For interactive tools, use non-interactive alternatives (e.g., 'echo "test" | nc -w 1 host port' instead of 'nc host port')
 
 Previous commands and outcomes:
 %sCRITICAL: Before running any command, review the command history above. Do NOT repeat commands that you've already tried. If a command failed, try a fundamentally different approach, not just minor variations.
 
 IMPORTANT: Give the next command as a single, simple linux command on one line. Do NOT use:
+- Interactive commands that wait for input (nc, irssi, top, less, vi, etc.)
 - Complex shell constructs like bash -lc
 - Multiple commands chained with && or ;
 - Subshells or command substitution
@@ -43,7 +57,7 @@ IMPORTANT: Give the next command as a single, simple linux command on one line. 
 - Markdown formatting or code blocks
 - Commands you've already attempted
 
-Just give ONE simple command that does ONE thing and that you haven't tried before.
+Just give ONE simple command that completes and exits and that you haven't tried before.
 
 `
 	outcomeSingle = `A Linux command was run, and this was its output:

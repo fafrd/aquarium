@@ -33,6 +33,7 @@ screen -S aquarium bash -c 'OPENAI_API_KEY=$OPENAI_API_KEY ./aquarium --goal "Yo
 - `--goal`: The objective to give the AI (default: "Your goal is to run a Minecraft server.")
 - `--context-mode`: "partial" (last 100 lines) or "full" (entire output) - affects cost vs accuracy
 - `--limit`: Maximum number of commands the AI should run (default: 30)
+- `--command-timeout`: Maximum time in seconds to wait for a command to finish before force-killing it (default: 60)
 - `--debug`: Enable logging of AI prompts to debug.log
 - `--preserve-container`: Keep Docker container after program completes
 - `--model`: OpenAI model to use (default: "gpt-4o-mini")

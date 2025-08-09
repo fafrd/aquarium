@@ -36,21 +36,23 @@ type Actor struct {
 	id                    string
 	iterationCount        int
 	iterationLimit        int
+	commandTimeoutSeconds int
 	terminalConnection    types.HijackedResponse
 	quit                  chan struct{}
 }
 
-func NewActor(model string, url string, goal string, contextMode string, iterationLimit int) *Actor {
+func NewActor(model string, url string, goal string, contextMode string, iterationLimit int, commandTimeoutSeconds int) *Actor {
 	rand.Seed(time.Now().UnixNano())
 	id := fmt.Sprintf("%08x", rand.Uint32())
 
 	return &Actor{
-		model:          model,
-		url:            url,
-		goal:           goal,
-		contextMode:    contextMode,
-		iterationLimit: iterationLimit,
-		id:             id,
+		model:                 model,
+		url:                   url,
+		goal:                  goal,
+		contextMode:           contextMode,
+		iterationLimit:        iterationLimit,
+		commandTimeoutSeconds: commandTimeoutSeconds,
+		id:                    id,
 		iterationCount: 0,
 		quit:           make(chan struct{}),
 	}
@@ -343,7 +345,10 @@ func (a *Actor) iteration() {
 	a.terminalConnection.Conn.Write([]byte(realCommand))
 
 	// wait for command to finish- poll isLastProcessRunning() until it returns false
+	// with a timeout to prevent hanging on interactive commands
 	waitMessageSent := false
+	commandTimeout := time.Duration(a.commandTimeoutSeconds) * time.Second
+	startTime := time.Now()
 	for {
 		isRunning, err := isLastProcessRunning()
 		time.Sleep(250 * time.Millisecond)
@@ -352,6 +357,14 @@ func (a *Actor) iteration() {
 			return
 		}
 		if !isRunning {
+			break
+		}
+		// Check for timeout
+		if time.Since(startTime) > commandTimeout {
+			logger.Logf("%s iteration %d: command timeout after %v seconds, force proceeding...\n", a.id, a.iterationCount, int(commandTimeout.Seconds()))
+			// Force kill the process by sending Ctrl+C to terminal
+			a.terminalConnection.Conn.Write([]byte("\x03")) // Ctrl+C
+			time.Sleep(500 * time.Millisecond) // Give it time to process
 			break
 		}
 		if !waitMessageSent {
